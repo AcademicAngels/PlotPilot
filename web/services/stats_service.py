@@ -3,8 +3,8 @@ from typing import Optional, List, Dict
 from datetime import datetime
 import logging
 
-from web.repositories.stats_repository import StatsRepository
-from web.models.stats_models import GlobalStats, BookStats, ChapterStats, WritingProgress
+from ..repositories.stats_repository import StatsRepository
+from ..models.stats_models import GlobalStats, BookStats, ChapterStats, WritingProgress
 
 logger = logging.getLogger(__name__)
 

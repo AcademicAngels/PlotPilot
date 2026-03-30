@@ -5,9 +5,9 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import PositiveInt
 
-from web.services.stats_service import StatsService
-from web.models.responses import SuccessResponse
-from web.models.stats_models import GlobalStats, BookStats, ChapterStats, WritingProgress
+from ..services.stats_service import StatsService
+from ..models.responses import SuccessResponse
+from ..models.stats_models import GlobalStats, BookStats, ChapterStats, WritingProgress
 
 logger = logging.getLogger("aitext.web.routers.stats")
 
