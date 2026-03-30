@@ -30,10 +30,7 @@
               </template>
 
               <template #2>
-                <div class="right-panel">
-                  <BiblePanel v-if="rightPanel === 'bible'" :key="biblePanelKey" :slug="slug" />
-                  <KnowledgePanel v-else :slug="slug" />
-                </div>
+                <SettingsPanel :slug="slug" :current-panel="rightPanel" :bible-key="biblePanelKey" />
               </template>
             </n-split>
           </template>
@@ -88,10 +85,9 @@ import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { bookApi, jobApi } from '../api/book'
-import KnowledgePanel from '../components/KnowledgePanel.vue'
-import BiblePanel from '../components/BiblePanel.vue'
 import ChapterList from '../components/workbench/ChapterList.vue'
 import ChatArea from '../components/workbench/ChatArea.vue'
+import SettingsPanel from '../components/workbench/SettingsPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -278,15 +274,5 @@ onUnmounted(() => {
 .workbench-inner :deep(.n-split-pane-1) {
   min-height: 0;
   overflow: hidden;
-}
-
-.right-panel {
-  height: 100%;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--aitext-panel-muted);
-  border-left: 1px solid var(--aitext-split-border);
 }
 </style>
