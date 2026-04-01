@@ -257,4 +257,34 @@ export const workflowApi = {
   /** POST /api/v1/jobs/{job_id}/cancel */
   cancelJob: (jobId: string) =>
     apiClient.post<{ ok: boolean }>(`/jobs/${jobId}/cancel`, {}) as Promise<{ ok: boolean }>,
+
+  // ============================================================================
+  // 新增：大纲规划、章节审稿、续写大纲
+  // ============================================================================
+
+  /** POST /api/v1/novels/{novel_id}/plan */
+  planNovel: (novelId: string, mode: 'initial' | 'revise' = 'initial', dryRun = false) =>
+    apiClient.post<{
+      success: boolean
+      message: string
+      bible_updated: boolean
+      outline_updated: boolean
+      chapters_planned: number
+    }>(`/novels/${novelId}/plan`, { mode, dry_run: dryRun }),
+
+  /** POST /api/v1/novels/{novel_id}/chapters/{chapter_number}/review */
+  reviewChapter: (novelId: string, chapterNumber: number) =>
+    apiClient.post<{
+      chapter_number: number
+      suggestions: string[]
+      score: number
+    }>(`/novels/${novelId}/chapters/${chapterNumber}/review`, {}),
+
+  /** POST /api/v1/novels/{novel_id}/outline/extend */
+  extendOutline: (novelId: string, fromChapter: number, count = 5) =>
+    apiClient.post<{
+      success: boolean
+      chapters_added: number
+      outlines: string[]
+    }>(`/novels/${novelId}/outline/extend`, { from_chapter: fromChapter, count }),
 }

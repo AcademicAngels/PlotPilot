@@ -4,7 +4,7 @@
 
     <n-spin :show="pageLoading" class="workbench-spin" description="加载工作台…">
       <div class="workbench-inner">
-        <n-split direction="horizontal" :min="0.14" :max="0.42" :default-size="0.22">
+        <n-split direction="horizontal" :min="0.12" :max="0.30" :default-size="0.18">
           <template #1>
             <ChapterList
               :slug="slug"
@@ -16,10 +16,10 @@
           </template>
 
           <template #2>
-            <n-split direction="horizontal" :min="0.28" :max="0.72" :default-size="0.55">
+            <n-split direction="horizontal" :min="0.40" :max="0.75" :default-size="0.60">
               <template #1>
-                <ChatArea
-                  ref="chatAreaRef"
+                <WorkArea
+                  ref="workAreaRef"
                   :slug="slug"
                   :book-title="bookTitle"
                   :chapters="chapters"
@@ -27,7 +27,7 @@
                   @set-right-panel="setRightPanel"
                   @open-plan-modal="openPlanModal"
                   @start-write="openWorkflowGenerate"
-                  @messages-updated="onMessagesUpdated"
+                  @chapter-updated="handleChapterUpdated"
                 />
               </template>
 
@@ -97,7 +97,7 @@ import { useMessage } from 'naive-ui'
 import { useWorkbench } from '../composables/useWorkbench'
 import StatsTopBar from '../components/stats/StatsTopBar.vue'
 import ChapterList from '../components/workbench/ChapterList.vue'
-import ChatArea from '../components/workbench/ChatArea.vue'
+import WorkArea from '../components/workbench/WorkArea.vue'
 import SettingsPanel from '../components/workbench/SettingsPanel.vue'
 import GenerateChapterWorkflowModal from '../components/workbench/GenerateChapterWorkflowModal.vue'
 
@@ -105,7 +105,7 @@ const route = useRoute()
 const message = useMessage()
 
 const slug = route.params.slug as string
-const chatAreaRef = ref<InstanceType<typeof ChatArea> | null>(null)
+const workAreaRef = ref<InstanceType<typeof WorkArea> | null>(null)
 const showWorkflowModal = ref(false)
 
 const openWorkflowGenerate = () => {
@@ -114,7 +114,11 @@ const openWorkflowGenerate = () => {
 
 const onWorkflowChapterSaved = async () => {
   await loadDesk()
-  await chatAreaRef.value?.fetchMessages?.()
+  biblePanelKey.value += 1
+}
+
+const handleChapterUpdated = async () => {
+  await loadDesk()
   biblePanelKey.value += 1
 }
 
@@ -143,7 +147,7 @@ const {
   stopPolling,
   goHome,
   goToChapter,
-} = useWorkbench({ slug, chatAreaRef })
+} = useWorkbench({ slug, chatAreaRef: workAreaRef })
 
 // Override currentChapterId with route-based computation
 const currentChapterId = computed(() => {

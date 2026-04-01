@@ -9,7 +9,7 @@ class GenerationConfig:
     """生成配置"""
     def __init__(
         self,
-        model: str = "claude-3-5-sonnet-20241022",
+        model: str = "claude-sonnet-4-6",
         max_tokens: int = 4096,
         temperature: float = 1.0
     ):
