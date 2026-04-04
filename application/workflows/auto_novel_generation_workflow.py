@@ -3,12 +3,14 @@
 整合所有子项目组件，实现完整的章节生成流程。
 """
 import logging
-from typing import Tuple, Dict, Any, AsyncIterator, Optional
+from typing import Tuple, Dict, Any, AsyncIterator, Optional, List
 from application.services.context_builder import ContextBuilder
 from application.services.state_extractor import StateExtractor
 from application.services.state_updater import StateUpdater
+from application.services.conflict_detection_service import ConflictDetectionService
 from application.dtos.generation_result import GenerationResult
 from application.dtos.scene_director_dto import SceneDirectorAnalysis
+from application.dtos.ghost_annotation import GhostAnnotation
 from domain.novel.services.consistency_checker import ConsistencyChecker
 from domain.novel.services.storyline_manager import StorylineManager
 from domain.novel.repositories.plot_arc_repository import PlotArcRepository
@@ -70,7 +72,8 @@ class AutoNovelGenerationWorkflow:
         state_extractor: Optional[StateExtractor] = None,
         state_updater: Optional[StateUpdater] = None,
         bible_repository: Optional[BibleRepository] = None,
-        foreshadowing_repository: Optional[ForeshadowingRepository] = None
+        foreshadowing_repository: Optional[ForeshadowingRepository] = None,
+        conflict_detection_service: Optional[ConflictDetectionService] = None
     ):
         """初始化工作流
 
@@ -84,6 +87,7 @@ class AutoNovelGenerationWorkflow:
             state_updater: 状态更新器（可选）
             bible_repository: Bible 仓储（用于一致性检查，可选）
             foreshadowing_repository: Foreshadowing 仓储（用于一致性检查，可选）
+            conflict_detection_service: 冲突检测服务（可选）
         """
         self.context_builder = context_builder
         self.consistency_checker = consistency_checker
@@ -94,6 +98,7 @@ class AutoNovelGenerationWorkflow:
         self.state_updater = state_updater
         self.bible_repository = bible_repository
         self.foreshadowing_repository = foreshadowing_repository
+        self.conflict_detection_service = conflict_detection_service
 
     async def generate_chapter(
         self,
@@ -169,6 +174,10 @@ class AutoNovelGenerationWorkflow:
         consistency_report = self._check_consistency(chapter_state, novel_id)
         logger.info(f"  ✓ 一致性检查: {len(consistency_report.issues)} 个问题, {len(consistency_report.warnings)} 个警告")
 
+        # Phase 4.3: Conflict Detection - 检测冲突并生成批注
+        ghost_annotations = self._detect_conflicts(novel_id, chapter_number, outline, scene_director)
+        logger.info(f"  ✓ 冲突检测: {len(ghost_annotations)} 个批注")
+
         # Phase 4.5: Update State - 更新 Bible 和 Knowledge
         if self.state_updater:
             try:
@@ -190,7 +199,8 @@ class AutoNovelGenerationWorkflow:
             content=content,
             consistency_report=consistency_report,
             context_used=context,
-            token_count=token_count
+            token_count=token_count,
+            ghost_annotations=ghost_annotations
         )
 
     async def generate_chapter_stream(
@@ -269,6 +279,10 @@ class AutoNovelGenerationWorkflow:
             consistency_report = self._check_consistency(chapter_state, novel_id)
             logger.info(f"  ✓ 一致性检查: {len(consistency_report.issues)} 个问题, {len(consistency_report.warnings)} 个警告")
 
+            # Phase 4.3: Conflict Detection - 检测冲突并生成批注
+            ghost_annotations = self._detect_conflicts(novel_id, chapter_number, outline, scene_director)
+            logger.info(f"  ✓ 冲突检测: {len(ghost_annotations)} 个批注")
+
             # Phase 4.5: Update State - 更新 Bible 和 Knowledge
             if self.state_updater:
                 try:
@@ -288,6 +302,7 @@ class AutoNovelGenerationWorkflow:
                 "content": content,
                 "consistency_report": _consistency_report_to_dict(consistency_report),
                 "token_count": token_count,
+                "ghost_annotations": [ann.to_dict() for ann in ghost_annotations],
             }
         except ValueError as e:
             logger.error(f"参数错误: {e}")
@@ -548,3 +563,140 @@ class AutoNovelGenerationWorkflow:
         except Exception as e:
             logger.warning(f"Consistency check failed: {e}")
             return ConsistencyReport(issues=[], warnings=[], suggestions=[])
+
+    def _detect_conflicts(
+        self,
+        novel_id: str,
+        chapter_number: int,
+        outline: str,
+        scene_director: Optional[SceneDirectorAnalysis] = None
+    ) -> List[GhostAnnotation]:
+        """检测冲突并生成幽灵批注
+
+        Args:
+            novel_id: 小说 ID
+            chapter_number: 章节号
+            outline: 章节大纲
+            scene_director: 场记分析结果（可选）
+
+        Returns:
+            GhostAnnotation 列表
+        """
+        # 如果没有冲突检测服务，返回空列表
+        if not self.conflict_detection_service:
+            logger.debug("ConflictDetectionService not available, skipping conflict detection")
+            return []
+
+        try:
+            # 构造 name_to_entity_id 映射（从 Bible 获取）
+            name_to_entity_id = self._build_name_to_entity_id_mapping(novel_id)
+
+            # 获取实体状态（从 Bible 或 NarrativeEntityStateService）
+            entity_states = self._get_entity_states(novel_id, chapter_number, name_to_entity_id)
+
+            # 调用冲突检测服务
+            annotations = self.conflict_detection_service.detect(
+                outline=outline,
+                entity_states=entity_states,
+                name_to_entity_id=name_to_entity_id,
+                scene_director=scene_director
+            )
+
+            return annotations
+
+        except Exception as e:
+            logger.warning(f"Conflict detection failed: {e}", exc_info=True)
+            return []
+
+    def _build_name_to_entity_id_mapping(self, novel_id: str) -> Dict[str, str]:
+        """构造实体名称到 ID 的映射
+
+        Args:
+            novel_id: 小说 ID
+
+        Returns:
+            {name: entity_id} 字典
+        """
+        name_to_id = {}
+
+        try:
+            if not self.bible_repository:
+                return name_to_id
+
+            novel_id_obj = NovelId(novel_id)
+            bible = self.bible_repository.get_by_novel_id(novel_id_obj)
+
+            if not bible:
+                return name_to_id
+
+            # 从 Bible 中提取角色名称和 ID
+            for character in bible.characters:
+                name_to_id[character.name] = character.id
+
+            # 从 Bible 中提取地点名称和 ID
+            for location in bible.locations:
+                name_to_id[location.name] = location.id
+
+        except Exception as e:
+            logger.warning(f"Failed to build name_to_entity_id mapping: {e}")
+
+        return name_to_id
+
+    def _get_entity_states(
+        self,
+        novel_id: str,
+        chapter_number: int,
+        name_to_entity_id: Dict[str, str]
+    ) -> Dict[str, Dict]:
+        """获取实体状态
+
+        Args:
+            novel_id: 小说 ID
+            chapter_number: 章节号
+            name_to_entity_id: 实体名称到 ID 的映射
+
+        Returns:
+            {entity_id: {attribute: value}} 字典
+        """
+        entity_states = {}
+
+        try:
+            if not self.bible_repository:
+                return entity_states
+
+            novel_id_obj = NovelId(novel_id)
+            bible = self.bible_repository.get_by_novel_id(novel_id_obj)
+
+            if not bible:
+                return entity_states
+
+            # 从 Bible 中提取角色状态（简化版本，使用静态属性）
+            for character in bible.characters:
+                state = {}
+
+                # 提取角色属性
+                if hasattr(character, 'attributes') and character.attributes:
+                    state.update(character.attributes)
+
+                # 提取角色描述中的关键信息（简化版本）
+                if hasattr(character, 'description') and character.description:
+                    desc = character.description.lower()
+                    # 检测魔法类型
+                    if '火系' in desc or '火魔法' in desc:
+                        state['magic_type'] = '火系'
+                    elif '水系' in desc or '水魔法' in desc:
+                        state['magic_type'] = '水系'
+                    elif '冰系' in desc or '冰魔法' in desc:
+                        state['magic_type'] = '冰系'
+                    elif '雷系' in desc or '雷魔法' in desc:
+                        state['magic_type'] = '雷系'
+                    elif '风系' in desc or '风魔法' in desc:
+                        state['magic_type'] = '风系'
+
+                if state:
+                    entity_states[character.id] = state
+
+        except Exception as e:
+            logger.warning(f"Failed to get entity states: {e}")
+
+        return entity_states

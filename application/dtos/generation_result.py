@@ -1,7 +1,8 @@
 """生成结果 DTO"""
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List
 from domain.novel.value_objects.consistency_report import ConsistencyReport
+from application.dtos.ghost_annotation import GhostAnnotation
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,7 @@ class GenerationResult:
     consistency_report: ConsistencyReport
     context_used: str
     token_count: int
+    ghost_annotations: List[GhostAnnotation] = None  # 幽灵批注（冲突检测结果）
 
     def __post_init__(self):
         if not self.content or not self.content.strip():
@@ -22,3 +24,6 @@ class GenerationResult:
             raise ValueError("token_count must be non-negative")
         if not self.context_used:
             raise ValueError("context_used cannot be empty")
+        # 确保 ghost_annotations 不为 None
+        if self.ghost_annotations is None:
+            object.__setattr__(self, 'ghost_annotations', [])

@@ -68,6 +68,17 @@ class ConsistencyIssueResponse(BaseModel):
     location: int
 
 
+class GhostAnnotationResponse(BaseModel):
+    """幽灵批注响应"""
+    type: str
+    severity: str
+    message: str
+    entity_id: Optional[str] = None
+    entity_name: Optional[str] = None
+    expected: Optional[str] = None
+    actual: Optional[str] = None
+
+
 class ConsistencyReportResponse(BaseModel):
     """一致性报告响应"""
     issues: List[ConsistencyIssueResponse]
@@ -80,6 +91,7 @@ class GenerateChapterResponse(BaseModel):
     content: str
     consistency_report: ConsistencyReportResponse
     token_count: int
+    ghost_annotations: List[GhostAnnotationResponse] = Field(default_factory=list, description="幽灵批注（冲突检测结果）")
 
 
 class StorylineResponse(BaseModel):
@@ -193,10 +205,25 @@ async def generate_chapter(
             for warning in result.consistency_report.warnings
         ]
 
+        # 转换幽灵批注
+        ghost_annotations = [
+            GhostAnnotationResponse(
+                type=annotation.type,
+                severity=annotation.severity,
+                message=annotation.message,
+                entity_id=annotation.entity_id,
+                entity_name=getattr(annotation, 'entity_name', None),
+                expected=getattr(annotation, 'expected', None),
+                actual=getattr(annotation, 'actual', None)
+            )
+            for annotation in result.ghost_annotations
+        ]
+
         logger.info(f"API 响应: 生成成功")
         logger.info(f"  内容长度: {len(result.content)} 字符")
         logger.info(f"  Token 数: {result.token_count}")
         logger.info(f"  问题数: {len(issues)}, 警告数: {len(warnings)}")
+        logger.info(f"  幽灵批注数: {len(ghost_annotations)}")
 
         # 检查幕是否完成，自动创建下一幕
         try:
@@ -217,7 +244,8 @@ async def generate_chapter(
                 warnings=warnings,
                 suggestions=result.consistency_report.suggestions
             ),
-            token_count=result.token_count
+            token_count=result.token_count,
+            ghost_annotations=ghost_annotations
         )
     except ValueError as e:
         logger.error(f"API 错误: 参数无效 - {e}")

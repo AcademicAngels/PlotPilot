@@ -269,3 +269,177 @@ class TestBuildPrompt:
         assert "主线" in prompt.system
         assert "HIGH" in prompt.system
         assert "CTX" in prompt.system
+
+class TestConflictDetectionIntegration:
+    """测试冲突检测集成"""
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_includes_ghost_annotations(
+        self,
+        mock_context_builder,
+        mock_consistency_checker,
+        mock_storyline_manager,
+        mock_plot_arc_repository,
+        mock_llm_service
+    ):
+        """测试生成章节时包含幽灵批注"""
+        from application.services.conflict_detection_service import ConflictDetectionService
+        from application.dtos.ghost_annotation import GhostAnnotation
+        from domain.bible.repositories.bible_repository import BibleRepository
+        from domain.bible.entities.bible import Bible
+        from domain.bible.entities.character import Character
+        from domain.novel.value_objects.novel_id import NovelId
+
+        # Mock ConflictDetectionService
+        mock_conflict_service = Mock(spec=ConflictDetectionService)
+        mock_conflict_service.detect.return_value = [
+            GhostAnnotation(
+                type="setting_conflict",
+                severity="warning",
+                message="设定库中李明为 [水系]，此处使用了 [火系]",
+                entity_id="char-001",
+                entity_name="李明",
+                expected="水系",
+                actual="火系"
+            )
+        ]
+
+        # Mock BibleRepository
+        mock_bible_repo = Mock(spec=BibleRepository)
+        mock_bible = Mock(spec=Bible)
+        mock_bible.characters = [
+            Mock(spec=Character, id="char-001", name="李明", description="水系法师", attributes={})
+        ]
+        mock_bible.locations = []
+        mock_bible_repo.get_by_novel_id.return_value = mock_bible
+
+        # 创建带冲突检测的工作流
+        workflow = AutoNovelGenerationWorkflow(
+            context_builder=mock_context_builder,
+            consistency_checker=mock_consistency_checker,
+            storyline_manager=mock_storyline_manager,
+            plot_arc_repository=mock_plot_arc_repository,
+            llm_service=mock_llm_service,
+            conflict_detection_service=mock_conflict_service,
+            bible_repository=mock_bible_repo
+        )
+
+        result = await workflow.generate_chapter(
+            novel_id="novel-1",
+            chapter_number=1,
+            outline="李明释放火球术攻击敌人"
+        )
+
+        # 验证返回结果包含批注
+        assert isinstance(result, GenerationResult)
+        assert len(result.ghost_annotations) == 1
+        assert result.ghost_annotations[0].type == "setting_conflict"
+        assert result.ghost_annotations[0].severity == "warning"
+        assert "李明" in result.ghost_annotations[0].message
+        assert "水系" in result.ghost_annotations[0].message
+        assert "火系" in result.ghost_annotations[0].message
+
+        # 验证冲突检测服务被调用
+        mock_conflict_service.detect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_no_annotations_when_no_conflicts(
+        self,
+        mock_context_builder,
+        mock_consistency_checker,
+        mock_storyline_manager,
+        mock_plot_arc_repository,
+        mock_llm_service
+    ):
+        """测试无冲突时返回空批注列表"""
+        from application.services.conflict_detection_service import ConflictDetectionService
+
+        # Mock ConflictDetectionService 返回空列表
+        mock_conflict_service = Mock(spec=ConflictDetectionService)
+        mock_conflict_service.detect.return_value = []
+
+        workflow = AutoNovelGenerationWorkflow(
+            context_builder=mock_context_builder,
+            consistency_checker=mock_consistency_checker,
+            storyline_manager=mock_storyline_manager,
+            plot_arc_repository=mock_plot_arc_repository,
+            llm_service=mock_llm_service,
+            conflict_detection_service=mock_conflict_service
+        )
+
+        result = await workflow.generate_chapter(
+            novel_id="novel-1",
+            chapter_number=1,
+            outline="李明与王总对话"
+        )
+
+        # 验证返回空批注列表
+        assert isinstance(result, GenerationResult)
+        assert len(result.ghost_annotations) == 0
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_without_conflict_service(
+        self,
+        workflow
+    ):
+        """测试没有冲突检测服务时不报错"""
+        # workflow fixture 默认没有 conflict_detection_service
+        result = await workflow.generate_chapter(
+            novel_id="novel-1",
+            chapter_number=1,
+            outline="Chapter outline"
+        )
+
+        # 验证不报错，返回空批注列表
+        assert isinstance(result, GenerationResult)
+        assert len(result.ghost_annotations) == 0
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_stream_includes_ghost_annotations(
+        self,
+        mock_context_builder,
+        mock_consistency_checker,
+        mock_storyline_manager,
+        mock_plot_arc_repository,
+        mock_llm_service
+    ):
+        """测试流式生成时包含幽灵批注"""
+        from application.services.conflict_detection_service import ConflictDetectionService
+        from application.dtos.ghost_annotation import GhostAnnotation
+
+        # Mock ConflictDetectionService
+        mock_conflict_service = Mock(spec=ConflictDetectionService)
+        mock_conflict_service.detect.return_value = [
+            GhostAnnotation(
+                type="setting_conflict",
+                severity="warning",
+                message="测试批注",
+                entity_id="char-001",
+                entity_name="测试角色"
+            )
+        ]
+
+        workflow = AutoNovelGenerationWorkflow(
+            context_builder=mock_context_builder,
+            consistency_checker=mock_consistency_checker,
+            storyline_manager=mock_storyline_manager,
+            plot_arc_repository=mock_plot_arc_repository,
+            llm_service=mock_llm_service,
+            conflict_detection_service=mock_conflict_service
+        )
+
+        events = []
+        async for event in workflow.generate_chapter_stream(
+            novel_id="novel-1",
+            chapter_number=1,
+            outline="测试大纲"
+        ):
+            events.append(event)
+
+        # 验证最后的 done 事件包含批注
+        done_event = events[-1]
+        assert done_event["type"] == "done"
+        assert "ghost_annotations" in done_event
+        assert len(done_event["ghost_annotations"]) == 1
+        assert done_event["ghost_annotations"][0]["type"] == "setting_conflict"
+        assert done_event["ghost_annotations"][0]["message"] == "测试批注"
