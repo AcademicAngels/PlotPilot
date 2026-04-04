@@ -25,7 +25,8 @@ class NarrativeEventRepository(ABC):
         novel_id: str,
         chapter_number: int,
         event_summary: str,
-        mutations: list[dict]
+        mutations: list[dict],
+        tags: list[str] = None
     ) -> str:
         """追加新事件
 
@@ -34,6 +35,7 @@ class NarrativeEventRepository(ABC):
             chapter_number: 章节号
             event_summary: 事件摘要
             mutations: 变更列表
+            tags: 事件标签列表（可选，默认空列表）
 
         Returns:
             新创建的 event_id

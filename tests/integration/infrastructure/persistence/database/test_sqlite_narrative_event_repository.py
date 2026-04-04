@@ -139,3 +139,92 @@ def test_mutations_json_serialization(repository, db):
     assert retrieved_mutations[0]["entity_id"] == "char-1"
     assert retrieved_mutations[0]["value"] == {"strength": 10, "intelligence": 15}
     assert retrieved_mutations[1]["value"] == ["sword", "shield", "potion"]
+
+
+def test_append_event_with_tags(repository, db):
+    """测试插入带 tags 的事件"""
+    # 先创建小说
+    db.execute(
+        "INSERT INTO novels (id, title, slug, target_chapters) VALUES (?, ?, ?, ?)",
+        ("novel-2", "Test Novel 2", "test-novel-2", 10)
+    )
+    db.get_connection().commit()
+
+    # 插入带 tags 的事件
+    tags = ["动机:冲动", "情绪:愤怒", "转折点"]
+    mutations = [{"entity_id": "char-1", "field": "mood", "value": "angry"}]
+
+    event_id = repository.append_event("novel-2", 1, "角色冲动行为", mutations, tags)
+    assert event_id
+
+    # 查询并验证 tags
+    events = repository.list_up_to_chapter("novel-2", 1)
+    assert len(events) == 1
+    assert events[0]["tags"] == tags
+
+
+def test_append_event_without_tags_defaults_to_empty_list(repository, db):
+    """测试不指定 tags 时默认为空列表"""
+    # 先创建小说
+    db.execute(
+        "INSERT INTO novels (id, title, slug, target_chapters) VALUES (?, ?, ?, ?)",
+        ("novel-3", "Test Novel 3", "test-novel-3", 10)
+    )
+    db.get_connection().commit()
+
+    # 插入不带 tags 的事件（使用默认值）
+    mutations = [{"entity_id": "char-1", "field": "location", "value": "城市A"}]
+    event_id = repository.append_event("novel-3", 1, "普通事件", mutations)
+    assert event_id
+
+    # 查询并验证 tags 为空列表
+    events = repository.list_up_to_chapter("novel-3", 1)
+    assert len(events) == 1
+    assert events[0]["tags"] == []
+
+
+def test_list_events_includes_tags_field(repository, db):
+    """测试查询结果包含 tags 字段"""
+    # 先创建小说
+    db.execute(
+        "INSERT INTO novels (id, title, slug, target_chapters) VALUES (?, ?, ?, ?)",
+        ("novel-4", "Test Novel 4", "test-novel-4", 10)
+    )
+    db.get_connection().commit()
+
+    # 插入多个事件，有的有 tags，有的没有
+    repository.append_event("novel-4", 1, "事件1", [], ["标签A", "标签B"])
+    repository.append_event("novel-4", 2, "事件2", [])
+    repository.append_event("novel-4", 3, "事件3", [], ["标签C"])
+
+    # 查询所有事件
+    events = repository.list_up_to_chapter("novel-4", 10)
+    assert len(events) == 3
+
+    # 验证 tags 字段存在且正确
+    assert "tags" in events[0]
+    assert events[0]["tags"] == ["标签A", "标签B"]
+    assert events[1]["tags"] == []
+    assert events[2]["tags"] == ["标签C"]
+
+
+def test_tags_with_chinese_characters(repository, db):
+    """测试 tags 支持中文字符"""
+    # 先创建小说
+    db.execute(
+        "INSERT INTO novels (id, title, slug, target_chapters) VALUES (?, ?, ?, ?)",
+        ("novel-5", "Test Novel 5", "test-novel-5", 10)
+    )
+    db.get_connection().commit()
+
+    # 插入带中文 tags 的事件
+    tags = ["动机:复仇", "情绪:悲伤", "主题:成长", "转折:顿悟"]
+    mutations = [{"entity_id": "char-1", "field": "goal", "value": "复仇"}]
+
+    event_id = repository.append_event("novel-5", 1, "角色决定复仇", mutations, tags)
+
+    # 查询并验证中文 tags 正确保存和读取
+    events = repository.list_up_to_chapter("novel-5", 1)
+    assert len(events) == 1
+    assert events[0]["tags"] == tags
+    assert all(isinstance(tag, str) for tag in events[0]["tags"])

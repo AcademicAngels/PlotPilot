@@ -25,18 +25,19 @@ class SqliteNarrativeEventRepository(NarrativeEventRepository):
             事件列表，按 chapter_number ASC 排序
         """
         sql = """
-            SELECT event_id, novel_id, chapter_number, event_summary, mutations, timestamp_ts
+            SELECT event_id, novel_id, chapter_number, event_summary, mutations, tags, timestamp_ts
             FROM narrative_events
             WHERE novel_id = ? AND chapter_number <= ?
             ORDER BY chapter_number ASC
         """
         rows = self.db.fetch_all(sql, (novel_id, max_chapter_inclusive))
 
-        # 反序列化 mutations JSON
+        # 反序列化 mutations 和 tags JSON
         events = []
         for row in rows:
             event = dict(row)
             event["mutations"] = json.loads(event["mutations"])
+            event["tags"] = json.loads(event["tags"])
             events.append(event)
 
         return events
@@ -46,7 +47,8 @@ class SqliteNarrativeEventRepository(NarrativeEventRepository):
         novel_id: str,
         chapter_number: int,
         event_summary: str,
-        mutations: list[dict]
+        mutations: list[dict],
+        tags: list[str] = None
     ) -> str:
         """追加新事件
 
@@ -55,18 +57,20 @@ class SqliteNarrativeEventRepository(NarrativeEventRepository):
             chapter_number: 章节号
             event_summary: 事件摘要
             mutations: 变更列表
+            tags: 事件标签列表（可选，默认空列表）
 
         Returns:
             新创建的 event_id
         """
         event_id = str(uuid4())
         mutations_json = json.dumps(mutations, ensure_ascii=False)
+        tags_json = json.dumps(tags if tags is not None else [], ensure_ascii=False)
 
         sql = """
-            INSERT INTO narrative_events (event_id, novel_id, chapter_number, event_summary, mutations)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO narrative_events (event_id, novel_id, chapter_number, event_summary, mutations, tags)
+            VALUES (?, ?, ?, ?, ?, ?)
         """
-        self.db.execute(sql, (event_id, novel_id, chapter_number, event_summary, mutations_json))
+        self.db.execute(sql, (event_id, novel_id, chapter_number, event_summary, mutations_json, tags_json))
         self.db.get_connection().commit()
 
         logger.info(f"Appended event {event_id} for novel {novel_id} chapter {chapter_number}")

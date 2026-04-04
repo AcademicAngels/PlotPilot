@@ -385,6 +385,7 @@ CREATE TABLE IF NOT EXISTS narrative_events (
     chapter_number INTEGER NOT NULL,
     event_summary TEXT NOT NULL DEFAULT '',
     mutations TEXT NOT NULL DEFAULT '[]',
+    tags TEXT NOT NULL DEFAULT '[]',
     timestamp_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (novel_id) REFERENCES novels(id) ON DELETE CASCADE
 );
