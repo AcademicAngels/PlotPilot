@@ -145,7 +145,12 @@ class AutoNovelGenerationWorkflow:
 
         # Phase 3: Generation - 调用 LLM
         logger.info("阶段 3: 生成 - 调用 LLM")
-        prompt = self._build_prompt(context, outline)
+        prompt = self._build_prompt(
+            context,
+            outline,
+            storyline_context=storyline_context,
+            plot_tension=plot_tension,
+        )
         config = GenerationConfig()
         logger.info(f"  → 发送请求到 LLM (max_tokens={config.max_tokens}, temperature={config.temperature})")
         llm_result = await self.llm_service.generate(prompt, config)
@@ -209,8 +214,8 @@ class AutoNovelGenerationWorkflow:
 
             yield {"type": "phase", "phase": "planning"}
             logger.info("阶段 1: 规划 - 获取故事线和情节上下文")
-            _ = self._get_storyline_context(novel_id, chapter_number)
-            _ = self._get_plot_tension(novel_id, chapter_number)
+            storyline_context = self._get_storyline_context(novel_id, chapter_number)
+            plot_tension = self._get_plot_tension(novel_id, chapter_number)
             logger.info("  ✓ 规划阶段完成")
 
             yield {"type": "phase", "phase": "context"}
@@ -226,7 +231,12 @@ class AutoNovelGenerationWorkflow:
 
             yield {"type": "phase", "phase": "llm"}
             logger.info("阶段 3: 生成 - 调用 LLM 流式生成")
-            prompt = self._build_prompt(context, outline)
+            prompt = self._build_prompt(
+                context,
+                outline,
+                storyline_context=storyline_context,
+                plot_tension=plot_tension,
+            )
             config = GenerationConfig()
             logger.info(f"  → 发送流式请求到 LLM")
             parts: list[str] = []
@@ -346,7 +356,8 @@ class AutoNovelGenerationWorkflow:
             storylines = self.storyline_manager.repository.get_by_novel_id(NovelId(novel_id))
             active_storylines = [
                 s for s in storylines
-                if s.estimated_chapter_start <= chapter_number <= s.estimated_chapter_end
+                if s.status.value == "active"
+                and s.estimated_chapter_start <= chapter_number <= s.estimated_chapter_end
             ]
 
             if not active_storylines:
@@ -388,19 +399,42 @@ class AutoNovelGenerationWorkflow:
             logger.warning(f"Failed to get plot tension: {e}")
             return "Plot tension unavailable"
 
-    def _build_prompt(self, context: str, outline: str) -> Prompt:
+    def _build_prompt(
+        self,
+        context: str,
+        outline: str,
+        *,
+        storyline_context: str = "",
+        plot_tension: str = "",
+    ) -> Prompt:
         """构建 LLM 提示词
 
         Args:
             context: 完整上下文
             outline: 章节大纲
+            storyline_context: 当前章相关故事线与里程碑（Phase 1）
+            plot_tension: 情节弧期望张力与下一锚点（Phase 1）
 
         Returns:
             Prompt 对象
         """
+        sc = (storyline_context or "").strip()
+        pt = (plot_tension or "").strip()
+        planning_parts: list[str] = []
+        if sc and sc not in ("Storyline context unavailable",):
+            planning_parts.append(f"【故事线 / 里程碑】\n{sc}")
+        if pt and pt not in ("Plot tension unavailable",):
+            planning_parts.append(f"【情节节奏 / 期望张力】\n{pt}")
+        planning_section = ""
+        if planning_parts:
+            planning_section = (
+                "\n".join(planning_parts)
+                + "\n\n以上约束须与本章大纲及后文 Bible/摘要一致；不得与之矛盾。\n"
+            )
+
         system_message = f"""你是一位专业的网络小说作家。根据以下上下文撰写章节内容。
 
-{context}
+{planning_section}{context}
 
 写作要求：
 1. 必须有多个人物互动（至少2-3个角色出场）

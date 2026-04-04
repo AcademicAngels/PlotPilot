@@ -146,18 +146,71 @@ class ContextBuilder:
         parts.append(f"\nChapter {chapter_number}")
         parts.append(f"Outline: {outline}")
 
-        # 活跃故事线
+        # 活跃故事线（与当前章有章节范围交集）
         storylines = self.storyline_manager.repository.get_by_novel_id(nid)
         if storylines:
-            parts.append("\nActive Storylines:")
+            parts.append("\nActive Storylines (for this chapter):")
             for storyline in storylines:
-                if storyline.status.value == "active":
-                    parts.append(f"- {storyline.storyline_type.value}: "
-                               f"Chapters {storyline.estimated_chapter_start}-{storyline.estimated_chapter_end}")
-                    # 待完成里程碑
-                    pending = storyline.get_pending_milestones()
-                    if pending:
-                        parts.append(f"  Pending milestones: {len(pending)}")
+                if storyline.status.value != "active":
+                    continue
+                if not (
+                    storyline.estimated_chapter_start
+                    <= chapter_number
+                    <= storyline.estimated_chapter_end
+                ):
+                    continue
+                parts.append(
+                    f"- {storyline.storyline_type.value}: "
+                    f"Chapters {storyline.estimated_chapter_start}-{storyline.estimated_chapter_end}"
+                )
+                pending = storyline.get_pending_milestones()
+                if pending:
+                    for m in pending[:4]:
+                        desc = (m.description or "")[:120]
+                        parts.append(
+                            f"  • Milestone #{m.order} {m.title}: {desc}"
+                            + ("…" if len(m.description or "") > 120 else "")
+                        )
+                    if len(pending) > 4:
+                        parts.append(f"  • …and {len(pending) - 4} more pending milestones")
+
+        # 情节弧：本章期望张力与下一锚点
+        if self.plot_arc_repository is not None:
+            try:
+                plot_arc = self.plot_arc_repository.get_by_novel_id(nid)
+                if plot_arc and plot_arc.key_points:
+                    tension = plot_arc.get_expected_tension(chapter_number)
+                    next_point = plot_arc.get_next_plot_point(chapter_number)
+                    parts.append("\nPlot arc (pacing):")
+                    parts.append(f"- Expected tension for this chapter: {tension.name} ({tension.value}/4)")
+                    if next_point:
+                        parts.append(
+                            f"- Next plot anchor: chapter {next_point.chapter_number} — {next_point.description}"
+                        )
+            except Exception:
+                pass
+
+        # Bible 时间线笔记（世界内时间参考）
+        try:
+            bible_dto = self.bible_service.get_bible_by_novel(novel_id)
+            if bible_dto and bible_dto.timeline_notes:
+                parts.append("\nBible timeline notes (story-world time, do not contradict):")
+                max_notes = 16
+                for note in bible_dto.timeline_notes[:max_notes]:
+                    ev = (note.event or "").strip()
+                    tp = (getattr(note, "time_point", None) or "").strip()
+                    desc = (note.description or "").strip()
+                    line = f"- {ev}" if ev else "- (event)"
+                    if tp:
+                        line += f" @ {tp}"
+                    if desc:
+                        short = desc[:160] + ("…" if len(desc) > 160 else "")
+                        line += f": {short}"
+                    parts.append(line)
+                if len(bible_dto.timeline_notes) > max_notes:
+                    parts.append(f"- …and {len(bible_dto.timeline_notes) - max_notes} more notes")
+        except Exception:
+            pass
 
         context = "\n".join(parts)
 
