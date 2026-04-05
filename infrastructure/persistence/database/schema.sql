@@ -431,3 +431,21 @@ CREATE TABLE IF NOT EXISTS novel_foreshadow_registry (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (novel_id) REFERENCES novels(id) ON DELETE CASCADE
 );
+
+-- ========== 文风漂移监控（Phase 5 Task 6）==========
+-- 每章生成后与作者指纹的相似度评分（0~1），用于连续漂移告警
+CREATE TABLE IF NOT EXISTS chapter_style_scores (
+    score_id TEXT PRIMARY KEY,
+    novel_id TEXT NOT NULL,
+    chapter_number INTEGER NOT NULL,
+    adjective_density REAL NOT NULL DEFAULT 0.0,
+    avg_sentence_length REAL NOT NULL DEFAULT 0.0,
+    sentence_count INTEGER NOT NULL DEFAULT 0,
+    similarity_score REAL NOT NULL DEFAULT 0.0,
+    computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (novel_id) REFERENCES novels(id) ON DELETE CASCADE,
+    UNIQUE(novel_id, chapter_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chapter_style_scores_novel
+    ON chapter_style_scores(novel_id, chapter_number);

@@ -37,6 +37,7 @@ from application.services.cast_service import CastService
 from application.services.knowledge_service import KnowledgeService
 from application.services.voice_sample_service import VoiceSampleService
 from application.services.voice_fingerprint_service import VoiceFingerprintService
+from application.services.voice_drift_service import VoiceDriftService
 from application.services.context_builder import ContextBuilder
 from application.services.auto_bible_generator import AutoBibleGenerator
 from application.services.auto_knowledge_generator import AutoKnowledgeGenerator
@@ -547,6 +548,15 @@ def get_voice_fingerprint_service() -> VoiceFingerprintService:
         get_voice_fingerprint_repository(),
         get_voice_vault_repository()
     )
+
+
+def get_voice_drift_service() -> VoiceDriftService:
+    """获取文风漂移监控服务"""
+    from infrastructure.persistence.database.sqlite_chapter_style_score_repository import (
+        SqliteChapterStyleScoreRepository,
+    )
+    score_repo = SqliteChapterStyleScoreRepository(get_database())
+    return VoiceDriftService(score_repo, get_voice_fingerprint_repository())
 
 
 def get_macro_refactor_scanner():

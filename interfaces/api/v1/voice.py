@@ -1,12 +1,13 @@
 """Voice API 路由"""
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import List, Optional
 
 from application.services.voice_sample_service import VoiceSampleService
 from interfaces.api.dependencies import (
     get_voice_sample_service,
     get_voice_fingerprint_service,
+    get_voice_drift_service,
 )
 from domain.shared.exceptions import EntityNotFoundError
 
@@ -118,3 +119,86 @@ def get_voice_fingerprint(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get voice fingerprint: {str(e)}")
+
+
+# ----- 文风漂移监控 -----
+
+class StyleScoreItem(BaseModel):
+    chapter_number: int
+    similarity_score: float
+    adjective_density: float
+    avg_sentence_length: float
+    sentence_count: int
+    computed_at: str
+
+
+class DriftReportResponse(BaseModel):
+    novel_id: str
+    scores: List[StyleScoreItem]
+    drift_alert: bool
+    alert_threshold: float
+    alert_consecutive: int
+
+
+class ScoreChapterRequest(BaseModel):
+    chapter_number: int = Field(..., ge=1)
+    content: str = Field(..., min_length=1)
+    pov_character_id: Optional[str] = None
+
+
+class ScoreChapterResponse(BaseModel):
+    chapter_number: int
+    similarity_score: Optional[float]
+    drift_alert: bool
+
+
+@router.post(
+    "/novels/{novel_id}/voice/drift/score",
+    response_model=ScoreChapterResponse,
+    status_code=200,
+    summary="计算章节文风评分",
+    description="计算指定章节内容与作者指纹的相似度并持久化"
+)
+def score_chapter_style(
+    novel_id: str = Path(..., description="小说 ID"),
+    request: ScoreChapterRequest = ...,
+    service=Depends(get_voice_drift_service),
+) -> ScoreChapterResponse:
+    try:
+        result = service.score_chapter(
+            novel_id=novel_id,
+            chapter_number=request.chapter_number,
+            content=request.content,
+            pov_character_id=request.pov_character_id,
+        )
+        return ScoreChapterResponse(
+            chapter_number=result["chapter_number"],
+            similarity_score=result["similarity_score"],
+            drift_alert=result["drift_alert"],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to score chapter: {str(e)}")
+
+
+@router.get(
+    "/novels/{novel_id}/voice/drift",
+    response_model=DriftReportResponse,
+    status_code=200,
+    summary="获取文风漂移报告",
+    description="返回全量章节评分序列与当前漂移告警状态"
+)
+def get_drift_report(
+    novel_id: str = Path(..., description="小说 ID"),
+    service=Depends(get_voice_drift_service),
+) -> DriftReportResponse:
+    try:
+        report = service.get_drift_report(novel_id)
+        return DriftReportResponse(
+            novel_id=report["novel_id"],
+            scores=[StyleScoreItem(**s) for s in report["scores"]],
+            drift_alert=report["drift_alert"],
+            alert_threshold=report["alert_threshold"],
+            alert_consecutive=report["alert_consecutive"],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get drift report: {str(e)}")
