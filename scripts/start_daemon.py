@@ -23,6 +23,7 @@ from infrastructure.persistence.database.sqlite_foreshadowing_repository import 
 
 from application.engine.services.autopilot_daemon import AutopilotDaemon
 from application.engine.services.background_task_service import BackgroundTaskService
+from application.engine.services.chapter_aftermath_pipeline import ChapterAftermathPipeline
 from application.engine.services.circuit_breaker import CircuitBreaker
 from application.blueprint.services.continuous_planning_service import ContinuousPlanningService
 
@@ -36,6 +37,8 @@ from interfaces.api.dependencies import (
     get_novel_repository,
     get_chapter_repository,
     get_voice_drift_service,
+    get_knowledge_service,
+    get_chapter_indexing_service,
 )
 from interfaces.api.middleware.logging_config import setup_logging
 
@@ -94,6 +97,19 @@ def build_daemon() -> AutopilotDaemon:
         triple_repository=triple_repo,
     )
 
+    aftermath_pipeline = None
+    try:
+        aftermath_pipeline = ChapterAftermathPipeline(
+            knowledge_service=get_knowledge_service(),
+            chapter_indexing_service=get_chapter_indexing_service(),
+            llm_service=llm_service,
+            voice_drift_service=voice_drift_service,
+            background_task_service=bg_service,
+        )
+        logger.info("ChapterAftermathPipeline 已注入（叙事/向量/文风/KG/后台抽取，与本进程 BG 队列一致）")
+    except Exception as e:
+        logger.warning("ChapterAftermathPipeline 初始化失败，审计将降级：%s", e)
+
     circuit_breaker = CircuitBreaker(
         failure_threshold=5,
         reset_timeout=120,
@@ -111,6 +127,7 @@ def build_daemon() -> AutopilotDaemon:
         voice_drift_service=voice_drift_service,
         circuit_breaker=circuit_breaker,
         chapter_workflow=chapter_workflow,
+        aftermath_pipeline=aftermath_pipeline,
     )
 
 

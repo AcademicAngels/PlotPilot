@@ -21,6 +21,7 @@ from domain.ai.value_objects.prompt import Prompt
 from application.engine.services.context_builder import ContextBuilder
 from application.engine.services.background_task_service import BackgroundTaskService, TaskType
 from application.workflows.auto_novel_generation_workflow import AutoNovelGenerationWorkflow
+from application.engine.services.chapter_aftermath_pipeline import ChapterAftermathPipeline
 from domain.novel.value_objects.chapter_id import ChapterId
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ class AutopilotDaemon:
         voice_drift_service=None,
         circuit_breaker=None,
         chapter_workflow: Optional[AutoNovelGenerationWorkflow] = None,
+        aftermath_pipeline: Optional[ChapterAftermathPipeline] = None,
     ):
         self.novel_repository = novel_repository
         self.llm_service = llm_service
@@ -54,6 +56,7 @@ class AutopilotDaemon:
         self.voice_drift_service = voice_drift_service
         self.circuit_breaker = circuit_breaker
         self.chapter_workflow = chapter_workflow
+        self.aftermath_pipeline = aftermath_pipeline
 
     def run_forever(self):
         """守护进程主循环（事务最小化原则）"""
@@ -617,13 +620,29 @@ class AutopilotDaemon:
         content = chapter.content or ""
         chapter_id = ChapterId(chapter.id)
 
-        # 1. 提交后台异步任务（不阻塞）
-        for task_type in [TaskType.VOICE_ANALYSIS, TaskType.GRAPH_UPDATE, TaskType.FORESHADOW_EXTRACT]:
-            self.background_task_service.submit_task(
-                task_type=task_type,
-                novel_id=novel.novel_id,
-                chapter_id=chapter_id,
-                payload={"content": content, "chapter_number": chapter_num}
+        # 1. 统一章后管线：叙事/向量、文风（一次）、KG 推断、GRAPH+伏笔（不重复入队 VOICE）
+        drift_result: Dict[str, Any] = {"drift_alert": False, "similarity_score": None}
+        if self.aftermath_pipeline:
+            try:
+                drift_result = await self.aftermath_pipeline.run_after_chapter_saved(
+                    novel.novel_id.value,
+                    chapter_num,
+                    content,
+                    novel_id_vo=novel.novel_id,
+                    chapter_id_vo=chapter_id,
+                )
+                logger.info(
+                    f"[{novel.novel_id}] 章后管线完成: 相似度={drift_result.get('similarity_score')}, "
+                    f"drift_alert={drift_result.get('drift_alert')}"
+                )
+            except Exception as e:
+                logger.warning(f"[{novel.novel_id}] 章后管线失败（降级旧逻辑）：{e}")
+                drift_result = self._legacy_auditing_tasks_and_voice(
+                    novel, chapter_num, content, chapter_id
+                )
+        else:
+            drift_result = self._legacy_auditing_tasks_and_voice(
+                novel, chapter_num, content, chapter_id
             )
 
         # 2. 张力打分（轻量 LLM 调用，~200 token）
@@ -631,23 +650,14 @@ class AutopilotDaemon:
         novel.last_chapter_tension = tension
         logger.info(f"[{novel.novel_id}] 章节 {chapter_num} 张力值：{tension}/10")
 
-        # 3. 文风漂移检测（同步）
-        drift_too_high = False
-        if self.voice_drift_service and content:
-            try:
-                result = self.voice_drift_service.score_chapter(
-                    novel_id=novel.novel_id.value,
-                    chapter_number=chapter_num,
-                    content=content
-                )
-                similarity = result.get("similarity_score")
-                drift_alert = result.get("drift_alert", False)
-                logger.info(f"[{novel.novel_id}] 文风相似度：{similarity}，告警：{drift_alert}")
-                drift_too_high = drift_alert
-            except Exception as e:
-                logger.warning(f"文风检测失败（跳过）：{e}")
+        drift_too_high = bool(drift_result.get("drift_alert", False))
+        if drift_result.get("similarity_score") is not None:
+            logger.info(
+                f"[{novel.novel_id}] 文风相似度：{drift_result.get('similarity_score')}，"
+                f"告警：{drift_too_high}"
+            )
 
-        # 4. 文风漂移 → 删章重写
+        # 3. 文风漂移 → 删章重写
         if drift_too_high:
             logger.warning(f"[{novel.novel_id}] 章节 {chapter_num} 文风漂移，删章重写")
             self.chapter_repository.delete(chapter_id)
@@ -666,6 +676,32 @@ class AutopilotDaemon:
             logger.info(f"[{novel.novel_id}] 🎉 全书完成！共 {len(completed)} 章")
             novel.autopilot_status = AutopilotStatus.STOPPED
             novel.current_stage = NovelStage.COMPLETED
+
+    def _legacy_auditing_tasks_and_voice(
+        self,
+        novel: Novel,
+        chapter_num: int,
+        content: str,
+        chapter_id: ChapterId,
+    ) -> Dict[str, Any]:
+        """无统一管线时：三任务入队 + 同步文风（可能与队列内 VOICE 重复）。"""
+        for task_type in [TaskType.VOICE_ANALYSIS, TaskType.GRAPH_UPDATE, TaskType.FORESHADOW_EXTRACT]:
+            self.background_task_service.submit_task(
+                task_type=task_type,
+                novel_id=novel.novel_id,
+                chapter_id=chapter_id,
+                payload={"content": content, "chapter_number": chapter_num},
+            )
+        if self.voice_drift_service and content:
+            try:
+                return self.voice_drift_service.score_chapter(
+                    novel_id=novel.novel_id.value,
+                    chapter_number=chapter_num,
+                    content=content,
+                )
+            except Exception as e:
+                logger.warning("文风检测失败（跳过）：%s", e)
+        return {"drift_alert": False, "similarity_score": None}
 
     async def _score_tension(self, content: str) -> int:
         """给章节打张力分（1-10），用于判断是否插入缓冲章"""
