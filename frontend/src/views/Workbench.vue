@@ -64,6 +64,8 @@ import { onMounted, computed, ref, watch, type ComponentPublicInstance } from 'v
 import { useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { useWorkbench } from '../composables/useWorkbench'
+import { useStatsStore } from '../stores/statsStore'
+import { useWorkbenchRefreshStore } from '../stores/workbenchRefreshStore'
 import StatsTopBar from '../components/stats/StatsTopBar.vue'
 import ChapterList from '../components/workbench/ChapterList.vue'
 import WorkArea from '../components/workbench/WorkArea.vue'
@@ -72,6 +74,8 @@ import ActPlanningModal from '../components/workbench/ActPlanningModal.vue'
 
 const route = useRoute()
 const message = useMessage()
+const statsStore = useStatsStore()
+const workbenchRefresh = useWorkbenchRefreshStore()
 
 const slug = route.params.slug as string
 
@@ -85,8 +89,10 @@ async function onSidebarChapterSelect(chapterId: number, title = '') {
 
 const handleChapterUpdated = async () => {
   await loadDesk()
+  void statsStore.loadBookStats(slug, true).catch(() => {})
   biblePanelKey.value += 1
   chapterListRef.value?.refreshStoryTree?.()
+  workbenchRefresh.bumpAfterChapterDeskChange()
 }
 
 // 幕→章 规划弹层

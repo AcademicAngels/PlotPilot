@@ -504,8 +504,46 @@ const isAssistedReadOnly = computed(
   () => workMode.value === 'assisted' && isAutopilotRunning.value
 )
 
+/** 与左侧章节「已收稿」、结构树同步：全托管推进时刷新 desk（首次快照只记录不 emit，避免与进入页重复请求） */
+const lastAutopilotDeskSnap = ref<string | null>(null)
+
+function deskSnapFromAutopilot(status: Record<string, unknown> | null | undefined): string {
+  if (!status) return ''
+  const s = status
+  return [
+    s.completed_chapters ?? 0,
+    s.manuscript_chapters ?? 0,
+    s.total_words ?? 0,
+    s.current_stage ?? '',
+    s.current_act ?? 0,
+    s.current_chapter_in_act ?? 0,
+    s.current_beat_index ?? 0,
+    s.needs_review === true ? '1' : '0',
+  ].join('|')
+}
+
+function maybeEmitDeskRefresh(status: Record<string, unknown> | null | undefined) {
+  const next = deskSnapFromAutopilot(status)
+  if (next === '') return
+  if (lastAutopilotDeskSnap.value === null) {
+    lastAutopilotDeskSnap.value = next
+    return
+  }
+  if (lastAutopilotDeskSnap.value === next) return
+  lastAutopilotDeskSnap.value = next
+  emit('chapterUpdated')
+}
+
+watch(
+  () => props.slug,
+  () => {
+    lastAutopilotDeskSnap.value = null
+  }
+)
+
 const handleAutopilotStatusChange = (status: any) => {
   autopilotStatus.value = status
+  maybeEmitDeskRefresh(status)
 }
 
 /** 辅助撰稿下不挂载驾驶舱，需独立轮询托管状态以支持「运行中只读」 */
@@ -522,7 +560,9 @@ async function pollAutopilotStatusWhileAssisted() {
   try {
     const res = await fetch(`/api/v1/autopilot/${props.slug}/status`)
     if (res.ok) {
-      autopilotStatus.value = await res.json()
+      const json = await res.json()
+      autopilotStatus.value = json
+      maybeEmitDeskRefresh(json)
     }
   } catch {
     /* 忽略 */

@@ -90,6 +90,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useWorkbenchRefreshStore } from '../../stores/workbenchRefreshStore'
 import { useMessage } from 'naive-ui'
 import { chroniclesApi } from '../../api/chronicles'
 import type { ChronicleRow, ChronicleSnapshot } from '../../api/chronicles'
@@ -126,6 +128,12 @@ async function load() {
 }
 
 watch(() => props.slug, () => void load(), { immediate: true })
+
+const refreshStore = useWorkbenchRefreshStore()
+const { chroniclesTick } = storeToRefs(refreshStore)
+watch(chroniclesTick, () => {
+  void load()
+})
 </script>
 
 <style scoped>

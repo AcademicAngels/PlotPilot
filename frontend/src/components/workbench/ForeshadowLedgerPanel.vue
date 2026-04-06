@@ -219,7 +219,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useWorkbenchRefreshStore } from '../../stores/workbenchRefreshStore'
 import { useMessage } from 'naive-ui'
 import { foreshadowApi } from '../../api/foreshadow'
 import type { ForeshadowEntry, MatchForeshadowResponse } from '../../api/foreshadow'
@@ -369,7 +371,14 @@ const remove = async (id: string) => {
   }
 }
 
+const refreshStore = useWorkbenchRefreshStore()
+const { foreshadowTick } = storeToRefs(refreshStore)
+
 onMounted(load)
+
+watch(foreshadowTick, () => {
+  void load()
+})
 </script>
 
 <style scoped>
