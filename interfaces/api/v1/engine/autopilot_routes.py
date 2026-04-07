@@ -508,17 +508,13 @@ async def autopilot_chapter_stream(novel_id: str):
         # 发送初始连接事件
         init_event = {
             "type": "connected",
-            "message": "章节内容流已连接（真正的流式）",
+            "message": "章节内容流已连接",
             "timestamp": datetime.now().isoformat()
         }
         yield f"data: {json.dumps(init_event, ensure_ascii=False)}\n\n"
 
-        # 订阅流式内容（用于同进程场景）
-        queue = streaming_bus.subscribe(novel_id)
         last_chapter_number = None
         heartbeat_counter = 0
-        # 跨进程文件读取位置（守护进程在独立进程，需通过文件通信）
-        file_position = 0
 
         try:
             while True:
@@ -556,19 +552,10 @@ async def autopilot_chapter_stream(novel_id: str):
                             }
                             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
                             streaming_bus.clear(novel_id)  # 清空旧内容
-                            file_position = 0  # 重置文件读取位置
                         last_chapter_number = chapter_number
 
-                # 尝试从队列获取增量文字（同进程场景）
-                chunk = None
-                try:
-                    chunk = await asyncio.wait_for(queue.get(), timeout=0.1)
-                except asyncio.TimeoutError:
-                    pass
-
-                # 如果队列中没有数据，尝试从文件读取（跨进程场景）
-                if chunk is None:
-                    chunk, file_position = streaming_bus.get_content_from_file(novel_id, file_position)
+                # 从跨进程队列获取增量文字
+                chunk = streaming_bus.get_chunk(novel_id, timeout=0.05)
 
                 if chunk:
                     event = {
@@ -593,13 +580,11 @@ async def autopilot_chapter_stream(novel_id: str):
                     yield f"data: {json.dumps(heartbeat_event, ensure_ascii=False)}\n\n"
                     heartbeat_counter = 0
 
-                # 轮询间隔（文件读取模式下需要较小延迟）
-                await asyncio.sleep(0.1)
+                # 轮询间隔
+                await asyncio.sleep(0.05)
 
         except Exception as e:
             logger.error(f"Chapter stream error: {e}")
-        finally:
-            streaming_bus.unsubscribe(novel_id, queue)
 
     return StreamingResponse(
         event_generator(),
