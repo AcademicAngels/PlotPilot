@@ -1249,17 +1249,17 @@ defineExpose({ ensureAssistedMode })
 .editor-body :deep(.n-input) {
   flex: 1;
   min-height: 0;
-  height: 100%;
+  height: 100% !important;
 }
 
-.editor-body :deep(.n-input .n-input-wrapper),
-.editor-body :deep(.n-input .n-input__border),
-.editor-body :deep(.n-input .n-input__state-border) {
-  height: 100%;
+.editor-body :deep(.n-input .n-input-wrapper) {
+  height: 100% !important;
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-body :deep(.n-input__textarea-el) {
-  height: 100% !important;
+  flex: 1;
   font-family: var(--font-mono);
   font-size: 14px;
   line-height: 1.8;
