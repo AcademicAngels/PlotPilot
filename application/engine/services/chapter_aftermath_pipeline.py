@@ -125,19 +125,30 @@ class ChapterAftermathPipeline:
             )
 
         # 2) 文风（落库 chapter_style_scores）
+        # 支持 LLM 模式（异步）和统计模式（同步）
         if self._voice:
             try:
-                vr = self._voice.score_chapter(
-                    novel_id=novel_id,
-                    chapter_number=chapter_number,
-                    content=content,
-                )
+                # 检查是否使用 LLM 模式
+                if getattr(self._voice, "use_llm_mode", False):
+                    vr = await self._voice.score_chapter_async(
+                        novel_id=novel_id,
+                        chapter_number=chapter_number,
+                        content=content,
+                    )
+                else:
+                    vr = self._voice.score_chapter(
+                        novel_id=novel_id,
+                        chapter_number=chapter_number,
+                        content=content,
+                    )
                 out["drift_alert"] = bool(vr.get("drift_alert", False))
                 out["similarity_score"] = vr.get("similarity_score")
+                out["voice_mode"] = vr.get("mode", "statistics")
                 logger.debug(
-                    "文风评分完成 novel=%s ch=%s drift=%s",
+                    "文风评分完成 novel=%s ch=%s mode=%s drift=%s",
                     novel_id,
                     chapter_number,
+                    out.get("voice_mode"),
                     out["drift_alert"],
                 )
             except Exception as e:

@@ -1,10 +1,17 @@
 """文风漂移监控服务
 
-计算章节文本与作者指纹的相似度评分，连续 N 章低于阈值时发出告警。
+支持两种模式：
+1. 统计模式（默认）：基于形容词密度、句长等统计特征，零成本
+2. LLM 模式：使用 LLM 分析深度风格特征，约 500 token/章
+
+连续 N 章低于阈值时发出告警。
 """
 import re
 import logging
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
+
+if TYPE_CHECKING:
+    from application.analyst.services.llm_voice_analysis_service import LLMVoiceAnalysisService
 
 logger = logging.getLogger(__name__)
 
@@ -22,20 +29,55 @@ _COMMON_ADJECTIVES = set(
 
 
 class VoiceDriftService:
-    """文风漂移监控服务"""
+    """文风漂移监控服务
 
-    def __init__(self, score_repo, fingerprint_repo):
+    支持统计模式和 LLM 模式：
+    - 统计模式：零成本，基于简单的文本统计
+    - LLM 模式：约 500 token/章，捕捉深度风格特征
+    """
+
+    def __init__(
+        self,
+        score_repo,
+        fingerprint_repo,
+        llm_voice_service: Optional["LLMVoiceAnalysisService"] = None,
+        use_llm_mode: bool = False,
+    ):
         """
         Args:
             score_repo: SqliteChapterStyleScoreRepository
             fingerprint_repo: VoiceFingerprintRepository
+            llm_voice_service: LLM 文风分析服务（可选）
+            use_llm_mode: 是否使用 LLM 模式（默认 False，使用统计模式）
         """
         self.score_repo = score_repo
         self.fingerprint_repo = fingerprint_repo
+        self.llm_voice_service = llm_voice_service
+        self.use_llm_mode = use_llm_mode
+
+        # LLM 模式下的基准风格缓存
+        self._baseline_cache: dict = {}
 
     # ------------------------------------------------------------------
     # 公开接口
     # ------------------------------------------------------------------
+
+    async def score_chapter_async(
+        self,
+        novel_id: str,
+        chapter_number: int,
+        content: str,
+        pov_character_id: Optional[str] = None,
+    ) -> dict:
+        """异步版本：计算章节文风评分并持久化（支持 LLM 模式）
+
+        Returns:
+            包含 chapter_number, similarity_score, drift_alert 的字典
+        """
+        if self.use_llm_mode and self.llm_voice_service:
+            return await self._score_chapter_llm(novel_id, chapter_number, content)
+        else:
+            return self.score_chapter(novel_id, chapter_number, content, pov_character_id)
 
     def score_chapter(
         self,
@@ -44,7 +86,7 @@ class VoiceDriftService:
         content: str,
         pov_character_id: Optional[str] = None,
     ) -> dict:
-        """计算章节文风评分并持久化。
+        """同步版本：统计模式计算章节文风评分并持久化。
 
         若作者指纹不存在，similarity_score 记为 None。
 
@@ -76,7 +118,111 @@ class VoiceDriftService:
             "metrics": metrics,
             "similarity_score": similarity,
             "drift_alert": drift_alert,
+            "mode": "statistics",
         }
+
+    async def _score_chapter_llm(
+        self,
+        novel_id: str,
+        chapter_number: int,
+        content: str,
+    ) -> dict:
+        """LLM 模式：使用 LLM 分析章节风格
+
+        自动建立基准：前 5 章用于建立基准，之后开始检测漂移。
+        """
+        # 1. 分析当前章节风格
+        style_vector = await self.llm_voice_service.analyze_chapter_style(
+            novel_id, chapter_number, content
+        )
+
+        # 2. 获取或建立基准
+        baseline = self._get_or_init_baseline(novel_id)
+
+        # 3. 计算相似度
+        if baseline and chapter_number > 5:
+            similarity = self.llm_voice_service.compute_drift_score(style_vector, baseline)
+        else:
+            # 前 5 章用于建立基准，不判漂移
+            similarity = None
+
+        # 4. 更新基准（每 5 章重新计算）
+        if chapter_number % 5 == 0:
+            await self._update_baseline(novel_id)
+
+        # 5. 持久化（兼容现有表结构）
+        metrics = {
+            "adjective_density": style_vector.get("description_depth", 0.5),
+            "avg_sentence_length": style_vector.get("pacing", 0.5) * 50,  # 映射到合理范围
+            "sentence_count": content.count("。") + content.count("！") + content.count("？"),
+        }
+
+        self.score_repo.upsert(
+            novel_id=novel_id,
+            chapter_number=chapter_number,
+            adjective_density=metrics["adjective_density"],
+            avg_sentence_length=metrics["avg_sentence_length"],
+            sentence_count=metrics["sentence_count"],
+            similarity_score=similarity,
+        )
+
+        drift_alert = self._check_drift_alert(novel_id)
+
+        logger.debug(
+            "LLM 文风评分完成 novel=%s ch=%d similarity=%s drift=%s",
+            novel_id, chapter_number, similarity, drift_alert
+        )
+
+        return {
+            "chapter_number": chapter_number,
+            "style_vector": style_vector,
+            "similarity_score": similarity,
+            "drift_alert": drift_alert,
+            "mode": "llm",
+        }
+
+    def _get_or_init_baseline(self, novel_id: str) -> Optional[dict]:
+        """获取或初始化基准风格"""
+        if novel_id in self._baseline_cache:
+            return self._baseline_cache[novel_id]
+
+        # 从数据库加载历史评分，计算基准
+        scores = self.score_repo.list_by_novel(novel_id, limit=10)
+        if len(scores) >= 5:
+            # 有足够数据，计算简单基准
+            style_vectors = []
+            for s in scores[:5]:
+                vec = {
+                    "description_depth": s.get("adjective_density", 0.5),
+                    "pacing": (s.get("avg_sentence_length", 25) / 50),  # 反向映射
+                }
+                style_vectors.append(vec)
+
+            baseline = self.llm_voice_service._compute_simple_baseline(style_vectors)
+            self._baseline_cache[novel_id] = baseline
+            return baseline
+
+        return None
+
+    async def _update_baseline(self, novel_id: str) -> None:
+        """更新基准风格（每 5 章调用一次）"""
+        if not self.llm_voice_service:
+            return
+
+        scores = self.score_repo.list_by_novel(novel_id, limit=10)
+        if len(scores) >= 5:
+            # 重新计算基准
+            style_vectors = []
+            for s in scores:
+                vec = {
+                    "description_depth": s.get("adjective_density", 0.5),
+                    "pacing": (s.get("avg_sentence_length", 25) / 50),
+                }
+                style_vectors.append(vec)
+
+            baseline = await self.llm_voice_service.compute_baseline(novel_id, style_vectors)
+            self._baseline_cache[novel_id] = baseline
+            logger.info("基准风格已更新 novel=%s", novel_id)
 
     def get_drift_report(self, novel_id: str) -> dict:
         """获取漂移报告（全量评分 + 告警状态）。"""
@@ -89,6 +235,7 @@ class VoiceDriftService:
             "drift_alert": drift_alert,
             "alert_threshold": DRIFT_ALERT_THRESHOLD,
             "alert_consecutive": DRIFT_ALERT_CONSECUTIVE,
+            "mode": "llm" if self.use_llm_mode else "statistics",
         }
 
     # ------------------------------------------------------------------
