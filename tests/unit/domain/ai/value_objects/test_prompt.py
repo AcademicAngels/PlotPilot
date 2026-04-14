@@ -50,3 +50,25 @@ def test_prompt_to_messages():
     assert messages[0]["content"] == "系统消息"
     assert messages[1]["role"] == "user"
     assert messages[1]["content"] == "用户消息"
+
+
+def test_prompt_from_messages():
+    """测试从通用消息列表构建 Prompt"""
+    prompt = Prompt.from_messages(
+        [
+            {"role": "developer", "content": "开发者规则"},
+            {"role": "user", "content": "请写一段"},
+            {"role": "assistant", "content": "好的"},
+        ]
+    )
+
+    assert prompt.system == "开发者规则"
+    assert prompt.user == "请写一段"
+    assert prompt.to_messages()[0]["role"] == "developer"
+    assert prompt.to_messages()[2]["role"] == "assistant"
+
+
+def test_prompt_messages_require_content():
+    """测试消息列表缺少 content 时抛出异常"""
+    with pytest.raises(ValueError, match="include content"):
+        Prompt.from_messages([{"role": "user"}])

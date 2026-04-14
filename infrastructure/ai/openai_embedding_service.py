@@ -21,9 +21,18 @@ class OpenAIEmbeddingService(EmbeddingService):
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
 
-        self.client = AsyncOpenAI(api_key=api_key)
-        self.model = "text-embedding-3-small"
-        self._dimension = 1536
+        client_kwargs = {
+            "api_key": api_key,
+            "timeout": float(os.getenv("OPENAI_TIMEOUT", "120")),
+            "max_retries": int(os.getenv("OPENAI_MAX_RETRIES", "2")),
+        }
+        base_url = os.getenv("OPENAI_BASE_URL")
+        if base_url and base_url.strip():
+            client_kwargs["base_url"] = base_url.strip()
+
+        self.client = AsyncOpenAI(**client_kwargs)
+        self.model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        self._dimension = self._resolve_dimension(self.model)
 
     def get_dimension(self) -> int:
         """获取嵌入向量的维度
@@ -85,3 +94,17 @@ class OpenAIEmbeddingService(EmbeddingService):
             return [item.embedding for item in response.data]
         except Exception as e:
             raise RuntimeError(f"Failed to generate embeddings: {str(e)}") from e
+
+    @staticmethod
+    def _resolve_dimension(model: str) -> int:
+        dimensions = {
+            "text-embedding-3-small": 1536,
+            "text-embedding-3-large": 3072,
+            "text-embedding-ada-002": 1536,
+        }
+
+        override = os.getenv("OPENAI_EMBEDDING_DIMENSION")
+        if override:
+            return int(override)
+
+        return dimensions.get(model, 1536)

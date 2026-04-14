@@ -15,7 +15,7 @@
       </n-text>
     </div>
 
-    <!-- 剧本基建：作品设定 / 世界观 / 知识库 -->
+    <!-- 剧本基建：作品设定 / 世界观 / 知识库 / 模型接入 -->
     <n-tabs
       v-if="activeGroup === 'foundation'"
       v-model:value="foundationTab"
@@ -32,6 +32,9 @@
       </n-tab-pane>
       <n-tab-pane name="knowledge" tab="知识库">
         <KnowledgePanel :slug="slug" />
+      </n-tab-pane>
+      <n-tab-pane name="model-provider" tab="模型接入">
+        <ModelProviderConfigPanel />
       </n-tab-pane>
     </n-tabs>
 
@@ -84,9 +87,10 @@ import HolographicChroniclesPanel from './HolographicChroniclesPanel.vue'
 import ForeshadowLedgerPanel from './ForeshadowLedgerPanel.vue'
 import MacroRefactorPanel from './MacroRefactorPanel.vue'
 import SandboxDialoguePanel from './SandboxDialoguePanel.vue'
+import ModelProviderConfigPanel from './ModelProviderConfigPanel.vue'
 
 /** 剧本基建组 */
-const FOUNDATION_TABS = new Set(['bible', 'worldbuilding', 'knowledge'])
+const FOUNDATION_TABS = new Set(['bible', 'worldbuilding', 'knowledge', 'model-provider'])
 /** 叙事脉络组（时间轴+快照已并入「全息编年史」；旧 tab id 见 LEGACY_NARRATIVE） */
 const NARRATIVE_TABS = new Set(['storyline-arc', 'chronicles', 'macro-refactor'])
 const LEGACY_NARRATIVE = new Set(['storylines', 'plot-arc', 'timeline', 'snapshots'])

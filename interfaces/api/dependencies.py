@@ -101,6 +101,21 @@ def _openai_base_url() -> Optional[str]:
     return u.strip() if u and u.strip() else None
 
 
+def _openai_timeout() -> float:
+    raw = os.getenv("OPENAI_TIMEOUT", "120").strip()
+    return float(raw)
+
+
+def _openai_max_retries() -> int:
+    raw = os.getenv("OPENAI_MAX_RETRIES", "2").strip()
+    return int(raw)
+
+
+def _openai_api_mode() -> str:
+    raw = os.getenv("OPENAI_API_MODE", "auto").strip().lower()
+    return raw or "auto"
+
+
 def _openai_settings(require_key: bool = True) -> Optional[Settings]:
     """构建 OpenAI Settings；require_key=False 时无密钥返回 None。"""
     key = _openai_api_key()
@@ -110,7 +125,14 @@ def _openai_settings(require_key: bool = True) -> Optional[Settings]:
                 "Set OPENAI_API_KEY (optional: OPENAI_BASE_URL)"
             )
         return None
-    return Settings(api_key=key, base_url=_openai_base_url())
+    return Settings(
+        api_key=key,
+        base_url=_openai_base_url(),
+        default_model=os.getenv("OPENAI_MODEL", "gpt-5.4"),
+        timeout=_openai_timeout(),
+        max_retries=_openai_max_retries(),
+        api_mode=_openai_api_mode(),
+    )
 
 
 def get_storage() -> FileStorage:
@@ -905,4 +927,3 @@ def get_foreshadow_ledger_service():
     """
     from application.analyst.services.foreshadow_ledger_service import ForeshadowLedgerService
     return ForeshadowLedgerService(get_foreshadowing_repository())
-

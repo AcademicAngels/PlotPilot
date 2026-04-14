@@ -15,6 +15,33 @@ class TestOpenAIEmbeddingService:
             service = OpenAIEmbeddingService()
             yield service
 
+    def test_initialization_with_custom_gateway_and_model(self):
+        """测试初始化支持 base_url、模型和维度覆盖"""
+        mock_client = Mock()
+        with patch.dict(
+            os.environ,
+            {
+                "OPENAI_API_KEY": "test-api-key",
+                "OPENAI_BASE_URL": "https://gateway.example.com/v1",
+                "OPENAI_TIMEOUT": "45",
+                "OPENAI_MAX_RETRIES": "5",
+                "OPENAI_EMBEDDING_MODEL": "text-embedding-3-large",
+            },
+            clear=True,
+        ):
+            with patch("infrastructure.ai.openai_embedding_service.AsyncOpenAI") as mock_openai:
+                mock_openai.return_value = mock_client
+                service = OpenAIEmbeddingService()
+
+        mock_openai.assert_called_once_with(
+            api_key="test-api-key",
+            timeout=45.0,
+            max_retries=5,
+            base_url="https://gateway.example.com/v1",
+        )
+        assert service.model == "text-embedding-3-large"
+        assert service.get_dimension() == 3072
+
     def test_initialization(self, service):
         """测试初始化"""
         assert service.client is not None
