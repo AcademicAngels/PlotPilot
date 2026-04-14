@@ -1,6 +1,18 @@
 <script setup lang="ts">
-import { NConfigProvider, NMessageProvider, NDialogProvider, zhCN, dateZhCN } from 'naive-ui'
+import { ref } from 'vue'
+import {
+  NConfigProvider,
+  NMessageProvider,
+  NDialogProvider,
+  NButton,
+  NDrawer,
+  NDrawerContent,
+  NTooltip,
+  zhCN,
+  dateZhCN,
+} from 'naive-ui'
 import type { GlobalThemeOverrides } from 'naive-ui'
+import ModelProviderConfigPanel from './components/workbench/ModelProviderConfigPanel.vue'
 
 const themeOverrides: GlobalThemeOverrides = {
   common: {
@@ -31,6 +43,8 @@ const themeOverrides: GlobalThemeOverrides = {
     borderRadius: '4px',
   },
 }
+
+const showLlmConfig = ref(false)
 </script>
 
 <template>
@@ -42,6 +56,28 @@ const themeOverrides: GlobalThemeOverrides = {
             <component :is="Component" />
           </transition>
         </router-view>
+
+        <n-tooltip trigger="hover" placement="left">
+          <template #trigger>
+            <n-button
+              class="global-llm-fab"
+              type="primary"
+              circle
+              strong
+              size="large"
+              @click="showLlmConfig = true"
+            >
+              LLM
+            </n-button>
+          </template>
+          配置 LLM 大模型 Key
+        </n-tooltip>
+
+        <n-drawer v-model:show="showLlmConfig" :width="520" placement="right" resizable>
+          <n-drawer-content body-content-style="padding: 0">
+            <ModelProviderConfigPanel />
+          </n-drawer-content>
+        </n-drawer>
       </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>
@@ -59,5 +95,30 @@ const themeOverrides: GlobalThemeOverrides = {
 .app-fade-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+.global-llm-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1200;
+  width: 58px;
+  height: 58px;
+  border-radius: 999px;
+  box-shadow: 0 16px 36px rgba(79, 70, 229, 0.28);
+}
+
+.global-llm-fab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 20px 40px rgba(79, 70, 229, 0.32);
+}
+
+@media (max-width: 768px) {
+  .global-llm-fab {
+    right: 14px;
+    bottom: 14px;
+    width: 54px;
+    height: 54px;
+  }
 }
 </style>
