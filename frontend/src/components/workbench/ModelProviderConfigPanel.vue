@@ -1,6 +1,6 @@
 <template>
-  <div class="provider-panel">
-    <header class="panel-header">
+  <div class="provider-panel" :class="{ embedded }">
+    <header v-if="!embedded" class="panel-header">
       <div class="header-main">
         <div class="title-row">
           <h3 class="panel-title">模型接入</h3>
@@ -137,6 +137,14 @@ import { onMounted, reactive, ref } from 'vue'
 import { useMessage } from 'naive-ui'
 import { llmConfigApi, type LlmProviderExample, type LlmProviderConfigResponse } from '../../api/llmConfig'
 
+interface Props {
+  embedded?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  embedded: false,
+})
+
 const message = useMessage()
 
 const loading = ref(false)
@@ -232,6 +240,10 @@ onMounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.provider-panel.embedded .panel-content {
+  padding: 0;
 }
 
 .panel-header {
