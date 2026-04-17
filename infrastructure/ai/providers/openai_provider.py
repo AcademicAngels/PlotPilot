@@ -48,7 +48,7 @@ class OpenAIProvider(BaseProvider):
         self.async_client = AsyncOpenAI(**client_kwargs)
 
     def _persist_legacy_flag(self, use_legacy: bool) -> None:
-        """将 use_legacy_chat_completions 标志持久化到数据库 (仅当有 profile_id 时)。"""
+        """将 use_legacy_chat_completions 标志持久化到数据库（仅当有 profile_id 时）。"""
         if not self._profile_id:
             return
         try:
@@ -138,11 +138,13 @@ class OpenAIProvider(BaseProvider):
                     self.__class__._fallback_to_chat_cache.add(base_url)
                     self._persist_legacy_flag(True)
                     logger.info(f"Stream: Responses API unsupported for {base_url}, falling back.")
+                    self._persist_legacy_flag(True)
                 except Exception as e:
                     if "404" in str(e) or "Not Found" in str(e) or "400" in str(e) or "Account invalid" in str(e) or "INVALID_ARGUMENT" in str(e):
                         self.__class__._fallback_to_chat_cache.add(base_url)
                         self._persist_legacy_flag(True)
                         logger.info(f"Stream: Gateway returned error for Responses API ({base_url}), falling back.")
+                        self._persist_legacy_flag(True)
                     else:
                         logger.error(f"[Responses Stream] Failed: {e}")
                         raise
