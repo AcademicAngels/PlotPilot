@@ -68,7 +68,6 @@ class NovelDTO:
     用于在应用层和外部层之间传输数据。
     """
     id: str
-    slug: str = ""
     title: str
     author: str
     target_chapters: int
@@ -76,6 +75,7 @@ class NovelDTO:
     premise: str
     chapters: List[ChapterDTO]
     total_word_count: int
+    slug: str = ""
     has_bible: bool = False
     has_outline: bool = False
     autopilot_status: str = "stopped"

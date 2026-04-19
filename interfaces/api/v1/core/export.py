@@ -95,8 +95,8 @@ async def export_chapter(
         
         if novel_id and chapter_number is not None:
             from application.core.services.chapter_service import ChapterService
-            from interfaces.api.dependencies import get_chapter_repository
-            chapter_service = ChapterService(get_chapter_repository())
+            from interfaces.api.dependencies import get_chapter_repository, get_novel_repository
+            chapter_service = ChapterService(get_chapter_repository(), get_novel_repository())
             chapter_dto = chapter_service.get_chapter_by_novel_and_number(novel_id, chapter_number)
             if not chapter_dto:
                 raise HTTPException(status_code=404, detail=f"章节不存在: 小说={novel_id}, 编号={chapter_number}")
