@@ -26,5 +26,7 @@ COPY --from=frontend-builder /build/dist/ ./frontend/dist/
 
 RUN mkdir -p data
 
+ENV PYTHONPATH=/app
+
 EXPOSE 8005
 CMD ["python", "-m", "uvicorn", "interfaces.main:app", "--host", "0.0.0.0", "--port", "8005"]
