@@ -162,17 +162,20 @@ def get_embedding_config():
 @embedding_router.put("/")
 def update_embedding_config(body: EmbeddingConfigUpdate):
     """更新嵌入模型配置（持久化到数据库）。"""
-    from application.ai.embedding_config_service import get_embedding_config_service
-    svc = get_embedding_config_service()
-    updated = svc.update_config(
-        mode=body.mode,
-        api_key=body.api_key,
-        base_url=body.base_url,
-        model=body.model,
-        use_gpu=body.use_gpu,
-        model_path=body.model_path,
-    )
-    return updated.to_api_dict()
+    try:
+        from application.ai.embedding_config_service import get_embedding_config_service
+        svc = get_embedding_config_service()
+        updated = svc.update_config(
+            mode=body.mode,
+            api_key=body.api_key,
+            base_url=body.base_url,
+            model=body.model,
+            use_gpu=body.use_gpu,
+            model_path=body.model_path,
+        )
+        return updated.to_dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新嵌入配置失败: {str(e)}")
 
 
 @embedding_router.post("/fetch-models")
