@@ -29,7 +29,8 @@ class SqliteBeatSheetRepository(BeatSheetRepository):
                     chapter_id TEXT NOT NULL UNIQUE,
                     data TEXT NOT NULL DEFAULT '{}',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
                 )
             """)
             self.db.execute("""

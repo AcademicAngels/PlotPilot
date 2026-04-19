@@ -394,7 +394,7 @@ class StoryNodeRepository:
                 nodes_by_parent[pid].append(row)
 
             for parent_id, children in nodes_by_parent.items():
-                if not children:
+                if parent_id is None or not children:
                     continue
                 starts = [r[2] for r in children if r[2] is not None]
                 ends = [r[3] for r in children if r[3] is not None]
