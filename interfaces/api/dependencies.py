@@ -248,6 +248,14 @@ def get_story_node_repository() -> StoryNodeRepository:
     return StoryNodeRepository(db_path)
 
 
+def get_export_service():
+    from application.core.services.export_service import ExportService
+    return ExportService(
+        novel_repository=get_novel_repository(),
+        chapter_repository=get_chapter_repository()
+    )
+
+
 # Service 依赖
 def get_novel_service() -> NovelService:
     """获取 Novel 服务

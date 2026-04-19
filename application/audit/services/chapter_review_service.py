@@ -16,6 +16,7 @@ import logging
 import os
 
 from domain.novel.entities.chapter import Chapter
+from domain.novel.value_objects.novel_id import NovelId
 from domain.novel.repositories.chapter_repository import ChapterRepository
 from domain.cast.repositories.cast_repository import CastRepository
 from domain.novel.repositories.timeline_repository import TimelineRepository
@@ -113,7 +114,7 @@ class ChapterReviewService:
 
     async def review_chapter(self, novel_id: str, chapter_number: int) -> ChapterReviewResult:
         """审稿章节"""
-        chapter = self.chapter_repo.get_by_number(novel_id, chapter_number)
+        chapter = self.chapter_repo.get_by_novel_and_number(NovelId(novel_id), chapter_number)
         if not chapter:
             raise ValueError(f"Chapter {chapter_number} not found")
 
