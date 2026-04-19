@@ -18,7 +18,7 @@ services:
     volumes:
       - ${DATA_PATH:-./data}:/app/data
     env_file: .env
-    command: python scripts/setup/start_daemon.py
+    command: python scripts/start_daemon.py
     restart: unless-stopped
     depends_on:
       - app
