@@ -68,6 +68,7 @@ class NovelDTO:
     用于在应用层和外部层之间传输数据。
     """
     id: str
+    slug: str = ""
     title: str
     author: str
     target_chapters: int
@@ -105,6 +106,7 @@ class NovelDTO:
 
         return cls(
             id=novel.novel_id.value,
+            slug=getattr(novel, 'slug', novel.novel_id.value) or novel.novel_id.value,
             title=novel.title,
             author=novel.author,
             target_chapters=novel.target_chapters,

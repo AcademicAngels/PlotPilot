@@ -619,5 +619,17 @@ CREATE TABLE IF NOT EXISTS llm_profiles (
 
 CREATE INDEX IF NOT EXISTS idx_llm_profiles_sort ON llm_profiles(sort_order);
 
+-- ========== Beat Sheets（节拍表）==========
+CREATE TABLE IF NOT EXISTS beat_sheets (
+    id TEXT PRIMARY KEY,
+    chapter_id TEXT NOT NULL UNIQUE,
+    data TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_beat_sheets_chapter ON beat_sheets(chapter_id);
+
 
 

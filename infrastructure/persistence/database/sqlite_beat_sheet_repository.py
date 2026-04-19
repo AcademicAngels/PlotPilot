@@ -16,6 +16,26 @@ class SqliteBeatSheetRepository(BeatSheetRepository):
 
     def __init__(self, db_connection):
         self.db = db_connection
+        self._ensure_table()
+
+    def _ensure_table(self):
+        cursor = self.db.execute("""
+            SELECT name FROM sqlite_master WHERE type='table' AND name='beat_sheets'
+        """)
+        if cursor.fetchone() is None:
+            self.db.execute("""
+                CREATE TABLE IF NOT EXISTS beat_sheets (
+                    id TEXT PRIMARY KEY,
+                    chapter_id TEXT NOT NULL UNIQUE,
+                    data TEXT NOT NULL DEFAULT '{}',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            self.db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_beat_sheets_chapter ON beat_sheets(chapter_id)
+            """)
+            self.db.get_connection().commit()
 
     async def save(self, beat_sheet: BeatSheet) -> None:
         """保存节拍表"""
