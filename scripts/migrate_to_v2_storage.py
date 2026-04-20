@@ -16,18 +16,34 @@ from typing import Dict, List, Optional, Set
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
+def _default_paths() -> Dict[str, str]:
+    """Resolve default paths using the same logic as the main application."""
+    try:
+        from application.paths import DATA_DIR
+        data = str(DATA_DIR)
+    except ImportError:
+        data = "./data"
+    return {
+        "sqlite_db": os.path.join(data, "aitext.db"),
+        "graph_db": os.getenv("GRAPH_DB_PATH", os.path.join(data, "novel_graph.db")),
+        "lance_db": os.getenv("LANCE_DB_PATH", os.path.join(data, "lance")),
+        "faiss": os.path.join(data, "chromadb"),
+    }
+
+
 class StorageMigration:
     def __init__(
         self,
-        sqlite_db_path: str = "./data/novels.db",
-        graph_db_path: str = "./data/novel_graph.db",
-        lance_db_path: str = "./data/lance",
-        faiss_path: str = "./data/chromadb",
+        sqlite_db_path: Optional[str] = None,
+        graph_db_path: Optional[str] = None,
+        lance_db_path: Optional[str] = None,
+        faiss_path: Optional[str] = None,
     ):
-        self._sqlite_path = sqlite_db_path
-        self._graph_path = graph_db_path
-        self._lance_path = lance_db_path
-        self._faiss_path = faiss_path
+        defaults = _default_paths()
+        self._sqlite_path = sqlite_db_path or defaults["sqlite_db"]
+        self._graph_path = graph_db_path or defaults["graph_db"]
+        self._lance_path = lance_db_path or defaults["lance_db"]
+        self._faiss_path = faiss_path or defaults["faiss"]
         self._completed = False
 
     def _get_sqlite_conn(self) -> sqlite3.Connection:
@@ -209,11 +225,12 @@ class StorageMigration:
 
 if __name__ == "__main__":
     import argparse
+    defaults = _default_paths()
     parser = argparse.ArgumentParser(description="Migrate PlotPilot storage to v2")
     parser.add_argument("--novel-id", help="Migrate specific novel only")
-    parser.add_argument("--db-path", default="./data/novels.db")
-    parser.add_argument("--graph-path", default="./data/novel_graph.db")
-    parser.add_argument("--lance-path", default="./data/lance")
+    parser.add_argument("--db-path", default=defaults["sqlite_db"])
+    parser.add_argument("--graph-path", default=defaults["graph_db"])
+    parser.add_argument("--lance-path", default=defaults["lance_db"])
     args = parser.parse_args()
 
     migration = StorageMigration(
