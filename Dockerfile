@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ── 阶段 2: 生产镜像 ──
-FROM python:3.11-slim AS production
+FROM python:3.12-slim AS production
 WORKDIR /app
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
