@@ -726,6 +726,20 @@ async function startBibleGeneration() {
           detail || '检查状态失败（网络或后端不可用），请确认本机已启动 API 并刷新重试'
         return
       }
+      // 检查后台任务是否已失败（LLM 报错等）
+      try {
+        const fb = await bibleApi.getBibleGenerationFeedback(props.novelId)
+        if (biblePollEpoch.value !== epoch || !generatingBible.value) return
+        if (fb.error) {
+          clearGenerationTimers()
+          generatingBible.value = false
+          const stageHint = fb.stage ? `（阶段：${fb.stage}）` : ''
+          bibleError.value = `${fb.error}${stageHint}`
+          return
+        }
+      } catch {
+        /* 反馈接口不可用时继续轮询 */
+      }
       if (biblePollEpoch.value !== epoch || !generatingBible.value) return
       schedulePoll(2000)
     }

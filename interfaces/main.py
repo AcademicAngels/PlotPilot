@@ -468,6 +468,10 @@ app.include_router(sandbox.router, prefix="/api/v1")
 app.include_router(monitor.router, prefix="/api/v1")
 app.include_router(llm_control.router, prefix="/api/v1")
 
+# System module routes
+from interfaces.api.v1.system.migration_routes import router as migration_router
+app.include_router(migration_router, prefix="/api/v1")
+
 # 注册统计路由（使用 SQLite 适配器）
 stats_repository = SqliteStatsRepositoryAdapter(get_database())
 stats_service = StatsService(stats_repository)

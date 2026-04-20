@@ -146,6 +146,12 @@ class TripleRepository:
         )
         return [self._row_to_triple(r, more, tags, attrs) for r in rows]
 
+    def traverse_relations(
+        self, novel_id: str, entity_id: str, max_hops: int = 3
+    ) -> List["Triple"]:
+        """Single-hop traversal for SQLite (multi-hop requires graph DB)."""
+        return self.get_by_entity_ids_sync(novel_id, [entity_id])
+
     def get_by_entity_ids_sync(self, novel_id: str, entity_ids: List[str]) -> List[Triple]:
         """同步：按实体名称列表召回关联三元组（subject 或 object 命中）。"""
         if not entity_ids:

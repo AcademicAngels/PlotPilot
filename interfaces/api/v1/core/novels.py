@@ -102,7 +102,7 @@ async def _generate_bible_background(
 
 
 # Routes
-@router.post("/", response_model=NovelDTO, status_code=201)
+@router.post("", response_model=NovelDTO, status_code=201)
 async def create_novel(
     request: CreateNovelRequest,
     service: NovelService = Depends(get_novel_service)
@@ -161,7 +161,7 @@ async def get_novel(
     return novel
 
 
-@router.get("/", response_model=List[NovelDTO])
+@router.get("", response_model=List[NovelDTO])
 async def list_novels(service: NovelService = Depends(get_novel_service)):
     """列出所有小说
 
