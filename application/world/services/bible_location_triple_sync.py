@@ -7,9 +7,9 @@ from typing import Any, Dict, List
 
 from domain.bible.bible_location_tree import validate_location_forest
 from domain.bible.triple import SourceType, Triple
+from domain.ports.triple_repository import TripleRepositoryProtocol
 from infrastructure.persistence.database.triple_repository import (
     BIBLE_ANCHOR_PREDICATE,
-    TripleRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def stable_anchor_triple_id(novel_id: str, bible_location_id: str) -> str:
 class BibleLocationTripleSyncService:
     """将 Bible 地点树投影为 bible_generated + 位于 三元组。"""
 
-    def __init__(self, triple_repository: TripleRepository) -> None:
+    def __init__(self, triple_repository: TripleRepositoryProtocol) -> None:
         self._repo = triple_repository
 
     def sync_from_locations(self, novel_id: str, locations: List[Dict[str, Any]]) -> None:

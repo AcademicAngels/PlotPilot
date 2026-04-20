@@ -11,7 +11,7 @@ from domain.ai.value_objects.prompt import Prompt
 from application.world.services.bible_service import BibleService
 from application.world.services.worldbuilding_service import WorldbuildingService
 from domain.bible.triple import Triple, SourceType
-from infrastructure.persistence.database.triple_repository import TripleRepository
+from domain.ports.triple_repository import TripleRepositoryProtocol
 from domain.shared.exceptions import EntityNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -203,7 +203,7 @@ class AutoBibleGenerator:
     - 世界观（5维度框架）
     """
 
-    def __init__(self, llm_service: LLMService, bible_service: BibleService, worldbuilding_service: WorldbuildingService = None, triple_repository: TripleRepository = None):
+    def __init__(self, llm_service: LLMService, bible_service: BibleService, worldbuilding_service: WorldbuildingService = None, triple_repository: TripleRepositoryProtocol = None):
         self.llm_service = llm_service
         self.bible_service = bible_service
         self.worldbuilding_service = worldbuilding_service

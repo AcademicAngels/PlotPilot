@@ -10,7 +10,7 @@ from datetime import datetime
 from domain.bible.triple import Triple, SourceType
 from domain.knowledge.triple_provenance import TripleProvenanceRecord
 from domain.structure.chapter_element import ChapterElement, ElementType, RelationType, Importance
-from infrastructure.persistence.database.triple_repository import TripleRepository
+from domain.ports.triple_repository import TripleRepositoryProtocol
 from infrastructure.persistence.database.chapter_element_repository import ChapterElementRepository
 from infrastructure.persistence.database.story_node_repository import StoryNodeRepository
 
@@ -22,7 +22,7 @@ class KnowledgeGraphService:
 
     def __init__(
         self,
-        triple_repo: TripleRepository,
+        triple_repo: TripleRepositoryProtocol,
         chapter_element_repo: ChapterElementRepository,
         story_node_repo: StoryNodeRepository
     ):
