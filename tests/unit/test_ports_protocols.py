@@ -42,3 +42,10 @@ def test_existing_triple_repository_satisfies_protocol():
         "get_by_entity_ids_sync", "search_by_predicate_sync", "get_recent_triples_sync",
     ]:
         assert hasattr(repo, method_name), f"Missing {method_name}"
+
+
+def test_sqlite_triple_repository_has_traverse_relations():
+    from infrastructure.persistence.database.triple_repository import TripleRepository
+    repo = TripleRepository.__new__(TripleRepository)
+    assert hasattr(repo, "traverse_relations")
+    assert callable(repo.traverse_relations)
