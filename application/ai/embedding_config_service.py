@@ -38,6 +38,12 @@ class EmbeddingConfigModel(BaseModel):
             "model_path": self.model_path,
         }
 
+    def to_api_dict(self) -> Dict[str, Any]:
+        result = self.to_dict()
+        result["created_at"] = self.created_at
+        result["updated_at"] = self.updated_at
+        return result
+
     @classmethod
     def from_row(cls, row: Dict[str, Any]) -> "EmbeddingConfigModel":
         return cls(

@@ -199,6 +199,13 @@ async def generate_bible(
                 stage=stage
             )
 
+            if not bible_data:
+                record_bible_generation_failure(
+                    novel_id, stage,
+                    "LLM 返回内容为空，请检查 AI 控制台中模型配置（如 max_tokens 是否超出模型上限）。"
+                )
+                return
+
             # 构建 Bible 摘要供 Knowledge 生成使用
             chars = bible_data.get("characters", [])
             locs = bible_data.get("locations", [])
@@ -278,7 +285,7 @@ async def get_bible_status(
         service: Bible 服务
 
     Returns:
-        状态信息：{ "exists": bool, "ready": bool }
+        状态信息：{ "exists": bool, "ready": bool, "error": str|null }
     """
     try:
         bible = service.get_bible_by_novel(novel_id)
@@ -286,11 +293,19 @@ async def get_bible_status(
         # 修改ready逻辑：只要有文风公约或世界观就算ready（支持分阶段生成）
         ready = exists and (len(bible.style_notes) > 0 or len(bible.world_settings) > 0 or len(bible.characters) > 0)
 
-        return {
+        result = {
             "exists": exists,
             "ready": ready,
             "novel_id": novel_id
         }
+
+        if not ready:
+            state = get_bible_generation_state(novel_id)
+            if state and state.get("error"):
+                result["error"] = state["error"]
+                result["stage"] = state.get("stage")
+
+        return result
     except Exception as e:
         logger.exception("get_bible_status failed for novel_id=%s", novel_id)
         raise HTTPException(status_code=500, detail=f"检查 Bible 状态失败: {e}") from e
