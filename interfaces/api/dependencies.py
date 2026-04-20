@@ -9,6 +9,9 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Optional
 
 from domain.ai.services.llm_service import LLMService
+from infrastructure.config.storage_factory import StorageFactory
+
+_storage_factory = StorageFactory()
 
 if TYPE_CHECKING:
     from application.engine.services.scene_director_service import SceneDirectorService
@@ -296,7 +299,6 @@ def get_chapter_service() -> ChapterService:
 def get_background_task_service():
     """单例后台任务队列（API 进程内）：文风；章末 bundle（叙事+三元组+伏笔+故事线+张力+对话+剧情点）与管线同源单次 LLM。"""
     from application.engine.services.background_task_service import BackgroundTaskService
-    from infrastructure.persistence.database.triple_repository import TripleRepository
     from infrastructure.persistence.database.sqlite_storyline_repository import SqliteStorylineRepository
     from infrastructure.persistence.database.sqlite_narrative_event_repository import SqliteNarrativeEventRepository
     from infrastructure.persistence.database.connection import get_database
@@ -305,7 +307,7 @@ def get_background_task_service():
         voice_drift_service=get_voice_drift_service(),
         llm_service=get_llm_service(),
         foreshadowing_repo=get_foreshadowing_repository(),
-        triple_repository=TripleRepository(),
+        triple_repository=_storage_factory.get_triple_repository(),
         knowledge_service=get_knowledge_service(),
         chapter_indexing_service=get_chapter_indexing_service(),
         storyline_repository=SqliteStorylineRepository(get_database()),
@@ -318,7 +320,6 @@ def get_background_task_service():
 def get_chapter_aftermath_pipeline():
     """章节保存后统一管线：叙事/向量、文风、KG 推断；三元组与伏笔、故事线、张力、对话、剧情点在叙事同步中一次 LLM 落库。"""
     from application.engine.services.chapter_aftermath_pipeline import ChapterAftermathPipeline
-    from infrastructure.persistence.database.triple_repository import TripleRepository
     from infrastructure.persistence.database.sqlite_storyline_repository import SqliteStorylineRepository
     from infrastructure.persistence.database.sqlite_narrative_event_repository import SqliteNarrativeEventRepository
     from infrastructure.persistence.database.connection import get_database
@@ -328,7 +329,7 @@ def get_chapter_aftermath_pipeline():
         chapter_indexing_service=get_chapter_indexing_service(),
         llm_service=get_llm_service(),
         voice_drift_service=get_voice_drift_service(),
-        triple_repository=TripleRepository(),
+        triple_repository=_storage_factory.get_triple_repository(),
         foreshadowing_repository=get_foreshadowing_repository(),
         storyline_repository=SqliteStorylineRepository(get_database()),
         chapter_repository=get_chapter_repository(),
@@ -378,9 +379,8 @@ def get_bible_service() -> BibleService:
     """
     from application.paths import get_db_path
     from application.world.services.bible_location_triple_sync import BibleLocationTripleSyncService
-    from infrastructure.persistence.database.triple_repository import TripleRepository
 
-    sync = BibleLocationTripleSyncService(TripleRepository())
+    sync = BibleLocationTripleSyncService(_storage_factory.get_triple_repository())
     return BibleService(
         get_bible_repository(),
         novel_repository=get_novel_repository(),
@@ -530,11 +530,14 @@ _vector_store_singleton: Optional[VectorStore] = None
 def get_vector_store() -> Optional[VectorStore]:
     """获取向量存储（单例，整个进程共享同一实例）
 
-    使用本地 FAISS 向量存储（ChromaDBVectorStore），无需外部服务。
+    根据 STORAGE_VERSION 环境变量选择后端：
+    - v1: ChromaDB (FAISS)
+    - v2: LanceDB
 
     环境变量配置：
     - VECTOR_STORE_ENABLED: 是否启用（"true" 启用，默认 "true"）
-    - VECTOR_STORE_PATH: 本地存储路径（默认 "./data/chromadb"）
+    - VECTOR_STORE_PATH: 本地存储路径（默认 "./data/chromadb"，仅 v1）
+    - LANCE_DB_PATH: LanceDB 路径（默认 "./data/lance"，仅 v2）
 
     Returns:
         VectorStore 实例或 None
@@ -548,9 +551,7 @@ def get_vector_store() -> Optional[VectorStore]:
         return None
 
     try:
-        from infrastructure.ai.chromadb_vector_store import ChromaDBVectorStore
-        persist_dir = os.getenv("VECTOR_STORE_PATH", "./data/chromadb")
-        _vector_store_singleton = ChromaDBVectorStore(persist_directory=persist_dir)
+        _vector_store_singleton = _storage_factory.get_vector_store()
         return _vector_store_singleton
     except Exception as e:
         logger.warning(f"Failed to initialize vector store: {e}")
@@ -573,7 +574,6 @@ def get_context_builder() -> ContextBuilder:
     Returns:
         ContextBuilder 实例
     """
-    from infrastructure.persistence.database.triple_repository import TripleRepository
     return ContextBuilder(
         bible_service=get_bible_service(),
         storyline_manager=get_storyline_manager(),
@@ -585,7 +585,7 @@ def get_context_builder() -> ContextBuilder:
         embedding_service=get_embedding_service(),
         foreshadowing_repository=get_foreshadowing_repository(),
         chapter_element_repository=get_chapter_element_repository(),
-        triple_repository=TripleRepository(),
+        triple_repository=_storage_factory.get_triple_repository(),
     )
 
 
@@ -637,16 +637,15 @@ def get_auto_bible_generator() -> AutoBibleGenerator:
     else:
         logger.info(f"Using {llm_service.__class__.__name__} for Bible generation")
 
-    # 导入 WorldbuildingService 和 TripleRepository
+    # 导入 WorldbuildingService
     from application.world.services.worldbuilding_service import WorldbuildingService
     from infrastructure.persistence.database.worldbuilding_repository import WorldbuildingRepository
-    from infrastructure.persistence.database.triple_repository import TripleRepository
     from application.paths import get_db_path
 
     db_path = get_db_path()
     worldbuilding_repo = WorldbuildingRepository(db_path)
     worldbuilding_service = WorldbuildingService(worldbuilding_repo)
-    triple_repo = TripleRepository()
+    triple_repo = _storage_factory.get_triple_repository()
 
     return AutoBibleGenerator(
         llm_service=llm_service,
