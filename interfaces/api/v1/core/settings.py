@@ -60,13 +60,13 @@ def _profile_to_dict(p: LLMProfile) -> dict:
 
 # ── endpoints ──────────────────────────────────────────
 
-@router.get("/")
+@router.get("")
 def list_configs():
     config = _service.get_config()
     return [_profile_to_dict(p) for p in config.profiles]
 
 
-@router.post("/")
+@router.post("")
 def create_config(body: ConfigCreate):
     config = _service.get_config()
     new_profile = LLMProfile(
@@ -151,7 +151,7 @@ class EmbeddingConfigUpdate(BaseModel):
     model_path: str = ""
 
 
-@embedding_router.get("/")
+@embedding_router.get("")
 def get_embedding_config():
     """获取当前嵌入模型配置（从数据库读取）。"""
     from application.ai.embedding_config_service import get_embedding_config_service
@@ -159,9 +159,12 @@ def get_embedding_config():
     return svc.to_api_dict()
 
 
-@embedding_router.put("/")
-def update_embedding_config(body: EmbeddingConfigUpdate):
-    """更新嵌入模型配置（持久化到数据库）。"""
+@embedding_router.put("")
+async def update_embedding_config(body: EmbeddingConfigUpdate):
+    """更新嵌入模型配置（持久化到数据库）。保存前对云端模式做连通性校验。"""
+    if body.mode == "openai" and body.api_key and body.model:
+        await _verify_embedding_connectivity(body.base_url, body.api_key, body.model)
+
     from application.ai.embedding_config_service import get_embedding_config_service
     svc = get_embedding_config_service()
     updated = svc.update_config(
@@ -173,6 +176,31 @@ def update_embedding_config(body: EmbeddingConfigUpdate):
         model_path=body.model_path,
     )
     return updated.to_api_dict()
+
+
+async def _verify_embedding_connectivity(base_url: str, api_key: str, model: str) -> None:
+    """发送一次真实 embedding 请求验证连通性。失败时抛出 422 并附带诊断信息。"""
+    import httpx as _httpx
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=base_url or None,
+        http_client=_httpx.AsyncClient(timeout=30, trust_env=False),
+    )
+    try:
+        await client.embeddings.create(model=model, input="connectivity_probe")
+    except Exception as exc:
+        detail = f"嵌入模型连通性校验失败：{exc}"
+        if "/embeddings/embeddings" in str(exc):
+            detail += (
+                f"\n\n检测到 URL 双重拼接：OpenAI SDK 会自动在 base_url 后追加 /embeddings，"
+                f"请将 base_url 改为去掉末尾 /embeddings 的地址。"
+                f"\n例如：{base_url.rstrip('/').rsplit('/embeddings', 1)[0]}"
+            )
+        raise HTTPException(status_code=422, detail=detail) from exc
+    finally:
+        await client.close()
 
 
 @embedding_router.post("/fetch-models")

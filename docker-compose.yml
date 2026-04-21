@@ -1,0 +1,24 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    ports:
+      - "8005:8005"
+    volumes:
+      - ${DATA_PATH:-./data}:/app/data
+    env_file: .env
+    restart: unless-stopped
+
+  daemon:
+    build:
+      context: .
+    volumes:
+      - ${DATA_PATH:-./data}:/app/data
+    env_file: .env
+    command: python scripts/start_daemon.py
+    restart: unless-stopped
+    depends_on:
+      - app

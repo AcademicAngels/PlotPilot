@@ -315,7 +315,7 @@
       :novel-id="setupWizard.novelId"
       :target-chapters="setupWizard.targetChapters"
       :show="true"
-      @update:show="(open) => { if (!open) setupWizard = null }"
+      @update:show="handleSetupClose"
       @complete="handleSetupComplete"
       @skip="handleSetupSkip"
     />
@@ -415,6 +415,7 @@ import { h, ref, onMounted, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, NIcon } from 'naive-ui'
 import { novelApi, type NovelDTO } from '../api/novel'
+import { bibleApi } from '../api/bible'
 import StatsSidebar from '@/components/stats/StatsSidebar.vue'
 import NovelSetupGuide from '@/components/onboarding/NovelSetupGuide.vue'
 import LLMSettingsModal from '@/components/LLMSettingsModal.vue'
@@ -667,6 +668,24 @@ const handleCreate = async () => {
     message.error(error.response?.data?.detail || '创建失败')
   } finally {
     creating.value = false
+  }
+}
+
+const handleSetupClose = async (open: boolean) => {
+  if (open) return
+  const id = setupWizard.value?.novelId
+  setupWizard.value = null
+  if (!id) return
+  try {
+    const status = await bibleApi.getBibleStatus(id)
+    if (!status.ready) {
+      await novelApi.deleteNovel(id)
+      novels.value = novels.value.filter(n => n.id !== id)
+    }
+  } catch {
+    // 状态查询失败时也尝试清理
+    try { await novelApi.deleteNovel(id) } catch { /* ignore */ }
+    novels.value = novels.value.filter(n => n.id !== id)
   }
 }
 
