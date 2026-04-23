@@ -1,0 +1,27 @@
+services:
+  app:
+    build:
+      target: production
+    volumes:
+      - .:/app
+      - /app/frontend/node_modules
+      - ${DATA_PATH:-./data}:/app/data
+    command: python -m uvicorn interfaces.main:app --host 0.0.0.0 --port 8005 --reload
+    ports:
+      - "8005:8005"
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app/frontend
+    volumes:
+      - ./frontend:/app/frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_TARGET=http://app:8005
+    command: npm run dev -- --host 0.0.0.0
+
+  daemon:
+    volumes:
+      - .:/app
+      - ${DATA_PATH:-./data}:/app/data
